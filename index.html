@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DMG Aerospace — Production Follow-Up v1</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:#0a1628; --bg2:#0f1d33; --bg3:#162540; --bg4:#1d2e4d; --bg5:#24375a;
+    --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.14);
+    --text:#e6ecf5; --text2:#8a9bb8; --text3:#506380;
+    --accent:#d4a843; --accent2:#b8922e;
+    --green:#3ecf8e; --amber:#e8b84a; --red:#e5534b; --purple:#9b8afb; --teal:#2dd4bf;
+    --font:'DM Sans',sans-serif; --mono:'DM Mono',monospace;
+    --r:8px; --rl:12px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;}
+
+  /* SIDEBAR */
+  .sidebar{width:230px;min-width:230px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;}
+  .logo{padding:14px 20px 10px;border-bottom:1px solid var(--border);}
+  .logo-mark{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--accent);letter-spacing:-1px;}
+  .logo-sub{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
+  .logo-ver{font-size:10px;color:var(--text3);margin-top:1px;}
+  .nav{flex:1;padding:10px 8px;overflow-y:auto;}
+  .nsec{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1.5px;padding:14px 10px 5px;}
+  .ni{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r);cursor:pointer;color:var(--text2);font-size:13px;transition:all .15s;margin-bottom:1px;}
+  .ni:hover{background:var(--bg3);color:var(--text);}
+  .ni.active{background:rgba(79,142,247,0.12);color:var(--accent);}
+  .ni-ic{width:15px;text-align:center;font-size:13px;}
+  .sb-bottom{padding:14px 16px;border-top:1px solid var(--border);}
+
+  /* MAIN */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--border);background:var(--bg2);}
+  .topbar-title{font-size:16px;font-weight:500;}
+  .topbar-right{display:flex;align-items:center;gap:12px;}
+  .content{flex:1;overflow-y:auto;padding:24px;}
+
+  /* PAGE SECTIONS */
+  .page{display:none;}
+  .page.active{display:block;}
+
+  /* CARDS */
+  .card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:20px;margin-bottom:16px;}
+  .card-title{font-size:14px;font-weight:500;margin-bottom:14px;color:var(--accent);}
+
+  /* KPI ROW */
+  .kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px;}
+  .kpi{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;}
+  .kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;}
+  .kpi-val{font-family:var(--mono);font-size:26px;font-weight:500;}
+  .kpi-sub{font-size:11px;color:var(--text2);margin-top:4px;}
+
+  /* TABLES */
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;padding:8px 10px;border-bottom:1px solid var(--border2);font-weight:500;}
+  td{padding:8px 10px;border-bottom:1px solid var(--border);color:var(--text2);}
+  tr:hover td{background:var(--bg3);}
+
+  /* BUTTONS */
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-size:13px;font-family:var(--font);cursor:pointer;border:1px solid var(--border2);background:var(--bg3);color:var(--text);transition:all .15s;}
+  .btn:hover{background:var(--bg4);}
+  .btn-primary{background:var(--accent);color:#0a1628;border-color:var(--accent);font-weight:500;}
+  .btn-primary:hover{background:var(--accent2);}
+  .btn-sm{padding:4px 10px;font-size:12px;}
+  .btn-danger{background:var(--red);color:#fff;border-color:var(--red);}
+  .btn-danger:hover{opacity:0.85;}
+
+  /* FORMS */
+  .form-group{margin-bottom:14px;}
+  .form-label{display:block;font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;}
+  .form-input,.form-select{width:100%;padding:8px 10px;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);color:var(--text);font-family:var(--font);font-size:13px;}
+  .form-input:focus,.form-select:focus{outline:none;border-color:var(--accent);}
+  .form-select{cursor:pointer;}
+  .form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+
+  /* BADGES */
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;}
+  .badge-green{background:rgba(62,207,142,0.15);color:var(--green);}
+  .badge-amber{background:rgba(232,184,74,0.15);color:var(--amber);}
+  .badge-red{background:rgba(229,83,75,0.15);color:var(--red);}
+  .badge-purple{background:rgba(155,138,251,0.15);color:var(--purple);}
+  .badge-teal{background:rgba(45,212,191,0.15);color:var(--teal);}
+  .badge-gray{background:rgba(80,99,128,0.2);color:var(--text2);}
+
+  /* STATUS DOTS */
+  .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+  .dot-requis{background:var(--text3);}
+  .dot-encours{background:var(--amber);}
+  .dot-bloque{background:var(--red);}
+  .dot-complete{background:var(--green);}
+
+  /* MODAL */
+  .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center;z-index:1000;}
+  .modal-overlay.show{display:flex;}
+  .modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--rl);padding:24px;width:90%;max-width:560px;max-height:80vh;overflow-y:auto;}
+  .modal-title{font-size:16px;font-weight:500;margin-bottom:16px;color:var(--accent);}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;}
+
+  /* TIMELINE BAR */
+  .timeline-bar{display:flex;gap:2px;margin:6px 0;}
+  .timeline-seg{height:6px;border-radius:3px;flex:1;background:var(--bg4);}
+  .timeline-seg.done{background:var(--green);}
+  .timeline-seg.active{background:var(--amber);}
+  .timeline-seg.blocked{background:var(--red);}
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar{width:6px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px;}
+
+  /* EMPTY STATE */
+  .empty-state{text-align:center;padding:60px 20px;color:var(--text3);}
+  .empty-state-icon{font-size:40px;margin-bottom:12px;opacity:0.5;}
+  .empty-state-msg{font-size:14px;margin-bottom:16px;}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:var(--r);font-size:13px;color:#fff;z-index:2000;opacity:0;transform:translateY(10px);transition:all .3s;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateY(0);}
+  .toast-success{background:var(--green);}
+  .toast-error{background:var(--red);}
+  .toast-info{background:var(--purple);}
+
+  /* OP RECIPE EDITOR */
+  .op-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+  .op-num{font-family:var(--mono);font-size:11px;color:var(--text3);width:30px;text-align:center;}
+  .op-name{flex:2;}
+  .op-detail{flex:2;}
+  .op-delay{width:60px;text-align:center;}
+  .op-actions{width:30px;text-align:center;}
+
+  /* SUIVI STATUS SELECT */
+  .status-select{padding:3px 6px;border-radius:4px;font-size:11px;border:1px solid var(--border);cursor:pointer;font-family:var(--font);}
+  .status-select.s-requis{background:rgba(80,99,128,0.2);color:var(--text2);}
+  .status-select.s-encours{background:rgba(232,184,74,0.15);color:var(--amber);}
+  .status-select.s-bloque{background:rgba(229,83,75,0.15);color:var(--red);}
+  .status-select.s-complete{background:rgba(62,207,142,0.15);color:var(--green);}
+  .status-select.s-na{background:rgba(80,99,128,0.1);color:var(--text3);}
+
+  /* FILTER BAR */
+  .filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .filter-bar .form-input,.filter-bar .form-select{width:auto;min-width:140px;}
+
+  /* RESPONSIVE */
+  @media(max-width:900px){
+    .sidebar{width:56px;min-width:56px;}
+    .sidebar .logo-mark,.sidebar .logo-sub,.sidebar .logo-ver,.sidebar .nsec,.sidebar .ni span:not(.ni-ic),.sidebar .sb-bottom{display:none;}
+    .sidebar .ni{justify-content:center;padding:10px;}
+    .sidebar .ni-ic{width:auto;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SIDEBAR ═══════════════ -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-mark">DMG Aerospace</div>
+    <div class="logo-sub">Production Follow-Up</div>
+    <div class="logo-ver">v1</div>
+  </div>
+  <nav class="nav">
+    <div class="nsec">Overview</div>
+    <div class="ni active" onclick="showPage('dashboard',this)"><span class="ni-ic">◎</span>Dashboard</div>
+    <div class="ni" onclick="showPage('suivi',this)"><span class="ni-ic">▶</span>Suivi Production</div>
+    <div class="nsec">Management</div>
+    <div class="ni" onclick="showPage('orders',this)"><span class="ni-ic">✦</span>Commandes</div>
+    <div class="ni" onclick="showPage('recipes',this)"><span class="ni-ic">☰</span>Recettes</div>
+    <div class="ni" onclick="showPage('templates',this)"><span class="ni-ic">▤</span>Templates</div>
+    <div class="nsec">Settings</div>
+    <div class="ni" onclick="showPage('holidays',this)"><span class="ni-ic">⚙</span>Jours fériés</div>
+  </nav>
+  <div class="sb-bottom">
+    <div style="font-size:10px;color:var(--text3);text-align:center;">Usinage mécanique DMG inc.</div>
+  </div>
+</aside>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="topbar-title">Dashboard</div>
+    <div class="topbar-right">
+      <span style="font-size:12px;color:var(--text3);" id="clock"></span>
+    </div>
+  </div>
+  <div class="content">
+
+    <!-- ─── DASHBOARD ─── -->
+    <div class="page active" id="page-dashboard">
+      <div class="kpi-row">
+        <div class="kpi"><div class="kpi-label">Commandes actives</div><div class="kpi-val" id="kpi-active">—</div></div>
+        <div class="kpi"><div class="kpi-label">En retard</div><div class="kpi-val" id="kpi-overdue" style="color:var(--red)">—</div></div>
+        <div class="kpi"><div class="kpi-label">Bloquées</div><div class="kpi-val" id="kpi-blocked" style="color:var(--amber)">—</div></div>
+        <div class="kpi"><div class="kpi-label">Complétées (30j)</div><div class="kpi-val" id="kpi-completed" style="color:var(--green)">—</div></div>
+        <div class="kpi"><div class="kpi-label">Prochaine expédition</div><div class="kpi-val" id="kpi-next-ship" style="font-size:16px;">—</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Commandes en retard</div>
+        <div id="dashboard-overdue-list">
+          <div class="empty-state"><div class="empty-state-icon">✓</div><div class="empty-state-msg">Aucune commande en retard</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Prochaines échéances (7 jours)</div>
+        <div id="dashboard-upcoming-list">
+          <div class="empty-state"><div class="empty-state-icon">📅</div><div class="empty-state-msg">Chargement...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── SUIVI PRODUCTION ─── -->
+    <div class="page" id="page-suivi">
+      <div class="filter-bar">
+        <input type="text" class="form-input" placeholder="Rechercher..." id="suivi-search" oninput="renderSuivi()" style="width:200px;"/>
+        <select class="form-select" id="suivi-client-filter" onchange="renderSuivi()" style="width:170px;">
+          <option value="">Tous les clients</option>
+        </select>
+        <select class="form-select" id="suivi-status-filter" onchange="renderSuivi()" style="width:150px;">
+          <option value="">Tous les statuts</option>
+          <option value="on-time">En temps</option>
+          <option value="overdue">En retard</option>
+          <option value="blocked">Bloqué</option>
+        </select>
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table id="suivi-table">
+          <thead>
+            <tr>
+              <th>Commande</th>
+              <th>No Pièce</th>
+              <th>Client</th>
+              <th>Date Requise</th>
+              <th>OP Active</th>
+              <th>Description</th>
+              <th>Détail</th>
+              <th>Date Limite</th>
+              <th>Statut</th>
+              <th>Progression</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="suivi-body">
+            <tr><td colspan="11" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── COMMANDES ─── -->
+    <div class="page" id="page-orders">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="filter-bar" style="margin-bottom:0;">
+          <input type="text" class="form-input" placeholder="Rechercher..." id="order-search" oninput="renderOrders()" style="width:200px;"/>
+        </div>
+        <button class="btn btn-primary" onclick="openOrderModal()">+ Nouvelle commande</button>
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>CommandeItem</th>
+              <th>Client</th>
+              <th>No Pièce</th>
+              <th>Date Requise</th>
+              <th>Quantité</th>
+              <th>No Bon Travail</th>
+              <th>OP en cours</th>
+              <th>Date Limite</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="orders-body">
+            <tr><td colspan="9" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── RECETTES ─── -->
+    <div class="page" id="page-recipes">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div class="filter-bar" style="margin-bottom:0;">
+          <input type="text" class="form-input" placeholder="Rechercher par No Pièce..." id="recipe-search" oninput="renderRecipes()" style="width:220px;"/>
+        </div>
+        <button class="btn btn-primary" onclick="openRecipeModal()">+ Nouvelle recette</button>
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>No Pièce</th>
+              <th>Template</th>
+              <th>Nb Ops</th>
+              <th>Opérations</th>
+              <th>Délai total (j.o.)</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="recipes-body">
+            <tr><td colspan="6" class="empty-state"><div class="empty-state-msg">Aucune recette</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ─── TEMPLATES ─── -->
+    <div class="page" id="page-templates">
+      <div class="card">
+        <div class="card-title">Templates de recette</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:14px;">Templates prédéfinis utilisés pour créer les recettes de pièces. Ces templates définissent la séquence d'opérations par défaut.</p>
+        <div id="templates-list"></div>
+      </div>
+    </div>
+
+    <!-- ─── HOLIDAYS ─── -->
+    <div class="page" id="page-holidays">
+      <div class="card">
+        <div class="card-title">Jours fériés — Québec</div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:14px;">Jours exclus du calcul de jours ouvrables. Inclut les fériés statutaires et la période de vacances de la construction.</p>
+        <div id="holidays-list"></div>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- ═══════════════ ORDER MODAL ═══════════════ -->
+<div class="modal-overlay" id="order-modal">
+  <div class="modal">
+    <div class="modal-title" id="order-modal-title">Nouvelle commande</div>
+    <input type="hidden" id="order-edit-key"/>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">No Bon Commande</label>
+        <input type="text" class="form-input" id="order-po" placeholder="5002340270"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">No Item</label>
+        <input type="text" class="form-input" id="order-item" placeholder="00001"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Client</label>
+        <select class="form-select" id="order-client">
+          <option value="">— Sélectionner —</option>
+          <option>Airbus Atlantique</option>
+          <option>Airbus Canada</option>
+          <option>Satair</option>
+          <option>Bombardier</option>
+          <option>Placeteco</option>
+          <option>Hutchison</option>
+          <option>Apex Précision</option>
+          <option>Bombardier Red Oak</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">No Pièce</label>
+        <input type="text" class="form-input" id="order-part" placeholder="C01645411-N0003"/>
+      </div>
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <label class="form-label">Date Requise</label>
+        <input type="date" class="form-input" id="order-date"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quantité</label>
+        <input type="number" class="form-input" id="order-qty" placeholder="1" min="1"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">No Bon Travail</label>
+        <input type="text" class="form-input" id="order-wo" placeholder="BT-001"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Commentaire</label>
+      <input type="text" class="form-input" id="order-comment" placeholder="Optionnel"/>
+    </div>
+    <div id="order-recipe-status" style="font-size:12px;color:var(--text2);margin-bottom:8px;"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('order-modal')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveOrder()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ RECIPE MODAL ═══════════════ -->
+<div class="modal-overlay" id="recipe-modal">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-title" id="recipe-modal-title">Nouvelle recette</div>
+    <input type="hidden" id="recipe-edit-key"/>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">No Pièce</label>
+        <input type="text" class="form-input" id="recipe-part" placeholder="C01645411-N0003"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Template</label>
+        <select class="form-select" id="recipe-template" onchange="applyTemplate()">
+          <option value="Custom">Custom (vide)</option>
+          <option value="Standard">Standard (8 ops)</option>
+          <option value="Standard+Assy">Standard+Assy (10 ops)</option>
+          <option value="Plastique">Plastique (7 ops)</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-title" style="margin-top:8px;">Séquence d'opérations</div>
+    <div id="recipe-ops-editor"></div>
+    <div style="margin-top:8px;">
+      <button class="btn btn-sm" onclick="addOpRow()">+ Ajouter opération</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('recipe-modal')">Annuler</button>
+      <button class="btn btn-primary" onclick="saveRecipe()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SUIVI DETAIL MODAL ═══════════════ -->
+<div class="modal-overlay" id="suivi-modal">
+  <div class="modal" style="max-width:800px;">
+    <div class="modal-title" id="suivi-modal-title">Détail commande</div>
+    <div id="suivi-modal-body"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('suivi-modal')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ TOAST ═══════════════ -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// DMG Aerospace — Production Follow-Up v1
+// ══════════════════════════════════════════════════════════
+
+const API_BASE = ''; // Will be set to Azure Function URL
+
+// ── CLIENTS ──
+const CLIENTS = ['Airbus Atlantique','Airbus Canada','Satair','Bombardier','Placeteco','Hutchison','Apex Précision','Bombardier Red Oak'];
+
+// ── OPERATIONS CATALOGUE ──
+const OPS_CATALOGUE = ['Commande Matière','Coupe','Usinage','Ébavurage','Sous-traitance','Assemblage','Inspection','Identification','Expédition'];
+const OPS_DETAILS = ['','Traitement Thermique','Finition (TNM)','Finition (Ultraspec)','Finition (IVD)',
+  'Machine #2','Machine #3','Machine #4','Machine #5','Machine #6','Machine #7',
+  'Machine #8','Machine #9','Machine #10','Machine #11','Machine #12','Machine #13','Machine #14','Machine #15',
+  'Heat Treat VAC Aero'];
+
+// ── TEMPLATES ──
+const TEMPLATES = {
+  'Custom': { ops: [] },
+  'Standard': {
+    ops: [
+      { name:'Commande Matière', detail:'', delay:20 },
+      { name:'Coupe', detail:'', delay:3 },
+      { name:'Usinage', detail:'***Info Requise***', delay:5 },
+      { name:'Ébavurage', detail:'', delay:3 },
+      { name:'Sous-traitance', detail:'Finition (TNM)', delay:12 },
+      { name:'Inspection', detail:'', delay:2 },
+      { name:'Identification', detail:'', delay:0 },
+      { name:'Expédition', detail:'', delay:2 }
+    ]
+  },
+  'Standard+Assy': {
+    ops: [
+      { name:'Commande Matière', detail:'', delay:20 },
+      { name:'Coupe', detail:'', delay:3 },
+      { name:'Usinage', detail:'***Info Requise***', delay:5 },
+      { name:'Ébavurage', detail:'', delay:3 },
+      { name:'Sous-traitance', detail:'Finition (TNM)', delay:12 },
+      { name:'Assemblage', detail:'', delay:4 },
+      { name:'Inspection', detail:'', delay:2 },
+      { name:'Identification', detail:'', delay:0 },
+      { name:'Inspection', detail:'', delay:2 },
+      { name:'Expédition', detail:'', delay:2 }
+    ]
+  },
+  'Plastique': {
+    ops: [
+      { name:'Commande Matière', detail:'', delay:25 },
+      { name:'Coupe', detail:'', delay:3 },
+      { name:'Usinage', detail:'***Info Requise***', delay:5 },
+      { name:'Ébavurage', detail:'', delay:3 },
+      { name:'Inspection', detail:'', delay:2 },
+      { name:'Identification', detail:'', delay:0 },
+      { name:'Expédition', detail:'', delay:2 }
+    ]
+  }
+};
+
+// ── HOLIDAYS (Quebec 2026-2027) ──
+const HOLIDAYS = [
+  // 2026
+  '2026-01-01','2026-04-03','2026-05-18','2026-06-24','2026-07-01',
+  '2026-07-20','2026-07-21','2026-07-22','2026-07-23','2026-07-24',
+  '2026-07-27','2026-07-28','2026-07-29','2026-07-30','2026-07-31',
+  '2026-09-07','2026-10-12','2026-12-25',
+  // 2027
+  '2027-01-01','2027-03-26','2027-05-24','2027-06-24','2027-07-01',
+  '2027-07-19','2027-07-20','2027-07-21','2027-07-22','2027-07-23',
+  '2027-07-26','2027-07-27','2027-07-28','2027-07-29','2027-07-30',
+  '2027-09-06','2027-10-11','2027-12-25'
+];
+const holidaySet = new Set(HOLIDAYS);
+
+// ── DATA STORES (in-memory, will move to Azure Table Storage) ──
+let orders = JSON.parse(localStorage.getItem('dmgfu_orders') || '[]');
+let recipes = JSON.parse(localStorage.getItem('dmgfu_recipes') || '[]');
+let suiviStatuses = JSON.parse(localStorage.getItem('dmgfu_suivi') || '{}'); // key: commandeItem, value: { op1:'Requis', op2:'En cours', ... }
+
+// ══════════════════════════════════════════════════════════
+// WORKING DAY CALCULATOR
+// ══════════════════════════════════════════════════════════
+
+function isWorkingDay(d) {
+  const day = d.getDay();
+  if (day === 0 || day === 6) return false; // weekend
+  const iso = d.toISOString().slice(0,10);
+  return !holidaySet.has(iso);
+}
+
+function subtractWorkingDays(fromDate, days) {
+  const d = new Date(fromDate);
+  let remaining = days;
+  while (remaining > 0) {
+    d.setDate(d.getDate() - 1);
+    if (isWorkingDay(d)) remaining--;
+  }
+  return d;
+}
+
+function addWorkingDays(fromDate, days) {
+  const d = new Date(fromDate);
+  let remaining = days;
+  while (remaining > 0) {
+    d.setDate(d.getDate() + 1);
+    if (isWorkingDay(d)) remaining--;
+  }
+  return d;
+}
+
+function workingDaysBetween(from, to) {
+  let count = 0;
+  const d = new Date(from);
+  const end = new Date(to);
+  while (d < end) {
+    d.setDate(d.getDate() + 1);
+    if (isWorkingDay(d)) count++;
+  }
+  return count;
+}
+
+// ══════════════════════════════════════════════════════════
+// PLANIFICATION — Backward-chain deadline calculation
+// ══════════════════════════════════════════════════════════
+
+function computeDeadlines(recipe, dateRequise) {
+  const dr = new Date(dateRequise + 'T12:00:00');
+  const ops = recipe.ops || [];
+  const deadlines = new Array(ops.length);
+  // Last op deadline = date requise
+  deadlines[ops.length - 1] = new Date(dr);
+  // Work backwards
+  for (let i = ops.length - 2; i >= 0; i--) {
+    const nextDeadline = deadlines[i + 1];
+    const delay = ops[i + 1].delay || 0;
+    deadlines[i] = subtractWorkingDays(nextDeadline, delay);
+  }
+  return deadlines;
+}
+
+function formatDate(d) {
+  if (!d) return '—';
+  return d.toISOString().slice(0,10);
+}
+
+function formatDateShort(d) {
+  if (!d) return '—';
+  const months = ['jan','fév','mar','avr','mai','jun','jul','aoû','sep','oct','nov','déc'];
+  return d.getDate() + ' ' + months[d.getMonth()];
+}
+
+// ══════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════
+
+const pageTitles = {
+  dashboard: 'Dashboard',
+  suivi: 'Suivi Production',
+  orders: 'Commandes',
+  recipes: 'Recettes',
+  templates: 'Templates de recette',
+  holidays: 'Jours fériés'
+};
+
+function showPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  if (el) el.classList.add('active');
+  document.getElementById('topbar-title').textContent = pageTitles[id] || id;
+  // Refresh data on page show
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'suivi') renderSuivi();
+  if (id === 'orders') renderOrders();
+  if (id === 'recipes') renderRecipes();
+  if (id === 'templates') renderTemplates();
+  if (id === 'holidays') renderHolidays();
+}
+
+// ══════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════
+
+function toast(msg, type = 'success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ══════════════════════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════════════════════
+
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+// ══════════════════════════════════════════════════════════
+// PERSIST (localStorage for Phase 1 — will move to Azure)
+// ══════════════════════════════════════════════════════════
+
+function persist() {
+  localStorage.setItem('dmgfu_orders', JSON.stringify(orders));
+  localStorage.setItem('dmgfu_recipes', JSON.stringify(recipes));
+  localStorage.setItem('dmgfu_suivi', JSON.stringify(suiviStatuses));
+}
+
+// ══════════════════════════════════════════════════════════
+// ORDERS — CRUD
+// ══════════════════════════════════════════════════════════
+
+function openOrderModal(editKey) {
+  const modal = document.getElementById('order-modal');
+  document.getElementById('order-edit-key').value = editKey || '';
+  if (editKey) {
+    const o = orders.find(x => x.commandeItem === editKey);
+    if (o) {
+      document.getElementById('order-modal-title').textContent = 'Modifier commande';
+      document.getElementById('order-po').value = o.po;
+      document.getElementById('order-item').value = o.item;
+      document.getElementById('order-client').value = o.client;
+      document.getElementById('order-part').value = o.partNumber;
+      document.getElementById('order-date').value = o.dateRequise;
+      document.getElementById('order-qty').value = o.qty;
+      document.getElementById('order-wo').value = o.workOrder || '';
+      document.getElementById('order-comment').value = o.comment || '';
+    }
+  } else {
+    document.getElementById('order-modal-title').textContent = 'Nouvelle commande';
+    ['order-po','order-item','order-client','order-part','order-date','order-qty','order-wo','order-comment'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el.tagName === 'SELECT') el.selectedIndex = 0; else el.value = '';
+    });
+  }
+  document.getElementById('order-recipe-status').textContent = '';
+  modal.classList.add('show');
+}
+
+function saveOrder() {
+  const po = document.getElementById('order-po').value.trim();
+  const item = document.getElementById('order-item').value.trim();
+  const client = document.getElementById('order-client').value;
+  const partNumber = document.getElementById('order-part').value.trim();
+  const dateRequise = document.getElementById('order-date').value;
+  const qty = parseInt(document.getElementById('order-qty').value) || 1;
+  const workOrder = document.getElementById('order-wo').value.trim();
+  const comment = document.getElementById('order-comment').value.trim();
+
+  if (!po || !item || !client || !partNumber || !dateRequise) {
+    toast('Veuillez remplir tous les champs obligatoires', 'error');
+    return;
+  }
+
+  const commandeItem = po + '-' + item;
+  const editKey = document.getElementById('order-edit-key').value;
+  const recipe = recipes.find(r => r.partNumber === partNumber);
+
+  if (editKey) {
+    const idx = orders.findIndex(x => x.commandeItem === editKey);
+    if (idx >= 0) {
+      orders[idx] = { ...orders[idx], po, item, commandeItem, client, partNumber, dateRequise, qty, workOrder, comment };
+    }
+  } else {
+    if (orders.find(x => x.commandeItem === commandeItem)) {
+      toast('CommandeItem ' + commandeItem + ' existe déjà', 'error');
+      return;
+    }
+    orders.push({ po, item, commandeItem, client, partNumber, dateRequise, qty, workOrder, comment, createdAt: new Date().toISOString() });
+    // Init suivi statuses
+    if (recipe) {
+      const statuses = {};
+      recipe.ops.forEach((op, i) => { statuses['op' + (i+1)] = 'Requis'; });
+      suiviStatuses[commandeItem] = statuses;
+    }
+  }
+
+  if (!recipe) {
+    document.getElementById('order-recipe-status').innerHTML = '<span style="color:var(--amber)">⚠ Aucune recette trouvée pour ' + partNumber + '. Créez-la dans Recettes.</span>';
+  }
+
+  persist();
+  closeModal('order-modal');
+  toast(editKey ? 'Commande modifiée' : 'Commande créée');
+  renderOrders();
+}
+
+function deleteOrder(commandeItem) {
+  if (!confirm('Supprimer la commande ' + commandeItem + ' ?')) return;
+  orders = orders.filter(x => x.commandeItem !== commandeItem);
+  delete suiviStatuses[commandeItem];
+  persist();
+  renderOrders();
+  toast('Commande supprimée');
+}
+
+function renderOrders() {
+  const search = (document.getElementById('order-search')?.value || '').toLowerCase();
+  const filtered = orders.filter(o => {
+    if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search) && !o.client.toLowerCase().includes(search)) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('orders-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-state-msg">Aucune commande</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => {
+    const recipe = recipes.find(r => r.partNumber === o.partNumber);
+    let activeOp = '—', deadline = '—';
+    if (recipe) {
+      const statuses = suiviStatuses[o.commandeItem] || {};
+      const deadlines = computeDeadlines(recipe, o.dateRequise);
+      for (let i = 0; i < recipe.ops.length; i++) {
+        if (statuses['op' + (i+1)] !== 'Complété') {
+          activeOp = recipe.ops[i].name;
+          deadline = formatDate(deadlines[i]);
+          break;
+        }
+      }
+    }
+    return `<tr>
+      <td style="color:var(--text);font-weight:500;">${o.commandeItem}</td>
+      <td>${o.client}</td>
+      <td><span style="font-family:var(--mono);font-size:12px;">${o.partNumber}</span></td>
+      <td>${o.dateRequise}</td>
+      <td>${o.qty}</td>
+      <td>${o.workOrder || '—'}</td>
+      <td>${activeOp}</td>
+      <td>${deadline}</td>
+      <td>
+        <button class="btn btn-sm" onclick="openOrderModal('${o.commandeItem}')">✎</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteOrder('${o.commandeItem}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// RECIPES — CRUD
+// ══════════════════════════════════════════════════════════
+
+let editingOps = [];
+
+function openRecipeModal(editKey) {
+  const modal = document.getElementById('recipe-modal');
+  document.getElementById('recipe-edit-key').value = editKey || '';
+  if (editKey) {
+    const r = recipes.find(x => x.partNumber === editKey);
+    if (r) {
+      document.getElementById('recipe-modal-title').textContent = 'Modifier recette';
+      document.getElementById('recipe-part').value = r.partNumber;
+      document.getElementById('recipe-part').disabled = true;
+      document.getElementById('recipe-template').value = r.template.replace('*','');
+      editingOps = JSON.parse(JSON.stringify(r.ops));
+    }
+  } else {
+    document.getElementById('recipe-modal-title').textContent = 'Nouvelle recette';
+    document.getElementById('recipe-part').value = '';
+    document.getElementById('recipe-part').disabled = false;
+    document.getElementById('recipe-template').value = 'Standard';
+    editingOps = JSON.parse(JSON.stringify(TEMPLATES['Standard'].ops));
+  }
+  renderOpsEditor();
+  modal.classList.add('show');
+}
+
+function applyTemplate() {
+  const tpl = document.getElementById('recipe-template').value;
+  editingOps = JSON.parse(JSON.stringify(TEMPLATES[tpl]?.ops || []));
+  renderOpsEditor();
+}
+
+function renderOpsEditor() {
+  const container = document.getElementById('recipe-ops-editor');
+  if (!editingOps.length) {
+    container.innerHTML = '<div style="padding:10px;color:var(--text3);font-size:12px;">Aucune opération. Cliquez "+ Ajouter opération" pour commencer.</div>';
+    return;
+  }
+  container.innerHTML = editingOps.map((op, i) => `
+    <div class="op-row">
+      <div class="op-num">OP${i+1}</div>
+      <div class="op-name">
+        <select class="form-select" onchange="editingOps[${i}].name=this.value" style="font-size:12px;padding:4px;">
+          ${OPS_CATALOGUE.map(o => `<option ${o===op.name?'selected':''}>${o}</option>`).join('')}
+        </select>
+      </div>
+      <div class="op-detail">
+        <input type="text" class="form-input" value="${op.detail||''}" onchange="editingOps[${i}].detail=this.value" placeholder="Détail..." style="font-size:12px;padding:4px;"/>
+      </div>
+      <div class="op-delay">
+        <input type="number" class="form-input" value="${op.delay}" onchange="editingOps[${i}].delay=parseInt(this.value)||0" min="0" style="font-size:12px;padding:4px;text-align:center;width:50px;"/>
+      </div>
+      <div class="op-actions">
+        <span style="cursor:pointer;color:var(--red);font-size:14px;" onclick="removeOpRow(${i})">✕</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function addOpRow() {
+  editingOps.push({ name: 'Inspection', detail: '', delay: 2 });
+  renderOpsEditor();
+}
+
+function removeOpRow(i) {
+  editingOps.splice(i, 1);
+  renderOpsEditor();
+}
+
+function saveRecipe() {
+  const partNumber = document.getElementById('recipe-part').value.trim();
+  const template = document.getElementById('recipe-template').value;
+  if (!partNumber) { toast('No Pièce requis', 'error'); return; }
+  if (!editingOps.length) { toast('Au moins une opération requise', 'error'); return; }
+
+  const editKey = document.getElementById('recipe-edit-key').value;
+  const isOverride = JSON.stringify(editingOps) !== JSON.stringify(TEMPLATES[template]?.ops || []);
+  const tplName = template + (isOverride ? '*' : '');
+
+  const recipeObj = {
+    partNumber,
+    template: tplName,
+    ops: JSON.parse(JSON.stringify(editingOps)),
+    nbOps: editingOps.length,
+    totalDelay: editingOps.reduce((s, o) => s + (o.delay || 0), 0)
+  };
+
+  if (editKey) {
+    const idx = recipes.findIndex(x => x.partNumber === editKey);
+    if (idx >= 0) recipes[idx] = recipeObj;
+  } else {
+    if (recipes.find(x => x.partNumber === partNumber)) {
+      toast('Recette pour ' + partNumber + ' existe déjà', 'error');
+      return;
+    }
+    recipes.push(recipeObj);
+  }
+
+  persist();
+  closeModal('recipe-modal');
+  toast(editKey ? 'Recette modifiée' : 'Recette créée');
+  renderRecipes();
+}
+
+function deleteRecipe(partNumber) {
+  if (!confirm('Supprimer la recette pour ' + partNumber + ' ?')) return;
+  recipes = recipes.filter(x => x.partNumber !== partNumber);
+  persist();
+  renderRecipes();
+  toast('Recette supprimée');
+}
+
+function renderRecipes() {
+  const search = (document.getElementById('recipe-search')?.value || '').toLowerCase();
+  const filtered = recipes.filter(r => !search || r.partNumber.toLowerCase().includes(search));
+
+  const tbody = document.getElementById('recipes-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="empty-state-msg">Aucune recette</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => `<tr>
+    <td style="font-family:var(--mono);font-size:12px;color:var(--text);">${r.partNumber}</td>
+    <td><span class="badge badge-teal">${r.template}</span></td>
+    <td>${r.nbOps}</td>
+    <td style="font-size:11px;color:var(--text2);">${r.ops.map(o=>o.name).join(' → ')}</td>
+    <td>${r.totalDelay} j.o.</td>
+    <td>
+      <button class="btn btn-sm" onclick="openRecipeModal('${r.partNumber}')">✎</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteRecipe('${r.partNumber}')">✕</button>
+    </td>
+  </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// TEMPLATES (read-only display)
+// ══════════════════════════════════════════════════════════
+
+function renderTemplates() {
+  const container = document.getElementById('templates-list');
+  container.innerHTML = Object.entries(TEMPLATES).filter(([k]) => !k.includes('*')).map(([name, tpl]) => {
+    if (!tpl.ops.length) return `<div class="card" style="margin-bottom:10px;">
+      <div style="font-weight:500;color:var(--text);margin-bottom:4px;">${name}</div>
+      <div style="font-size:12px;color:var(--text3);">Template vide — toutes les opérations sont saisies manuellement.</div>
+    </div>`;
+    return `<div class="card" style="margin-bottom:10px;">
+      <div style="font-weight:500;color:var(--text);margin-bottom:8px;">${name} <span style="font-size:11px;color:var(--text3);">(${tpl.ops.length} ops, ${tpl.ops.reduce((s,o)=>s+o.delay,0)} j.o.)</span></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${tpl.ops.map((o,i) => `<div style="background:var(--bg3);padding:4px 10px;border-radius:var(--r);font-size:11px;">
+          <span style="color:var(--text3);">OP${i+1}</span> ${o.name} <span style="color:var(--accent);font-family:var(--mono);">${o.delay}j</span>
+          ${o.detail ? '<span style="color:var(--text3);"> — '+o.detail+'</span>' : ''}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// HOLIDAYS (display)
+// ══════════════════════════════════════════════════════════
+
+const HOLIDAY_NAMES = {
+  '01-01':'Jour de l\'An', '04-03':'Vendredi Saint (2026)', '03-26':'Vendredi Saint (2027)',
+  '05-18':'Journée des Patriotes (2026)', '05-24':'Journée des Patriotes (2027)',
+  '06-24':'Fête nationale du Québec', '07-01':'Fête du Canada',
+  '09-07':'Fête du Travail (2026)', '09-06':'Fête du Travail (2027)',
+  '10-12':'Action de Grâce (2026)', '10-11':'Action de Grâce (2027)',
+  '12-25':'Noël'
+};
+
+function renderHolidays() {
+  const container = document.getElementById('holidays-list');
+  const byYear = {};
+  HOLIDAYS.forEach(h => {
+    const y = h.slice(0,4);
+    if (!byYear[y]) byYear[y] = [];
+    byYear[y].push(h);
+  });
+
+  container.innerHTML = Object.entries(byYear).map(([year, dates]) => `
+    <div style="margin-bottom:16px;">
+      <div style="font-weight:500;color:var(--text);margin-bottom:8px;">${year}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${dates.map(d => {
+          const md = d.slice(5);
+          const isVac = (d >= year+'-07-19' && d <= year+'-07-31');
+          const name = isVac ? 'Vacances construction' : (HOLIDAY_NAMES[md] || md);
+          return `<div style="background:var(--bg3);padding:4px 10px;border-radius:var(--r);font-size:11px;">
+            <span style="color:var(--accent);font-family:var(--mono);">${d}</span>
+            <span style="color:var(--text2);margin-left:6px;">${name}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// SUIVI — Live Tracking
+// ══════════════════════════════════════════════════════════
+
+function getActiveOp(order) {
+  const recipe = recipes.find(r => r.partNumber === order.partNumber);
+  if (!recipe) return { index: -1, name: '—', detail: '—', deadline: null, nbOps: 0, recipe: null, deadlines: [] };
+
+  const statuses = suiviStatuses[order.commandeItem] || {};
+  const deadlines = computeDeadlines(recipe, order.dateRequise);
+
+  for (let i = 0; i < recipe.ops.length; i++) {
+    const st = statuses['op' + (i+1)] || 'Requis';
+    if (st !== 'Complété' && st !== 'N/A') {
+      return { index: i, name: recipe.ops[i].name, detail: recipe.ops[i].detail, deadline: deadlines[i], nbOps: recipe.ops.length, recipe, deadlines, statuses };
+    }
+  }
+  return { index: -1, name: 'Terminé', detail: '', deadline: null, nbOps: recipe.ops.length, recipe, deadlines, statuses, completed: true };
+}
+
+function updateSuiviStatus(commandeItem, opKey, value) {
+  if (!suiviStatuses[commandeItem]) suiviStatuses[commandeItem] = {};
+  suiviStatuses[commandeItem][opKey] = value;
+  persist();
+  renderSuivi();
+}
+
+function renderSuivi() {
+  const search = (document.getElementById('suivi-search')?.value || '').toLowerCase();
+  const clientFilter = document.getElementById('suivi-client-filter')?.value || '';
+  const statusFilter = document.getElementById('suivi-status-filter')?.value || '';
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  // Populate client filter
+  const clientSelect = document.getElementById('suivi-client-filter');
+  if (clientSelect && clientSelect.options.length <= 1) {
+    CLIENTS.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; clientSelect.appendChild(opt); });
+  }
+
+  let filtered = orders.filter(o => {
+    if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
+    if (clientFilter && o.client !== clientFilter) return false;
+    const info = getActiveOp(o);
+    if (statusFilter === 'overdue' && (!info.deadline || info.deadline >= today)) return false;
+    if (statusFilter === 'blocked') {
+      const st = info.statuses?.['op' + (info.index+1)] || '';
+      if (st !== 'Bloqué') return false;
+    }
+    if (statusFilter === 'on-time' && info.deadline && info.deadline < today) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('suivi-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="empty-state-msg">Aucune commande trouvée</div></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => {
+    const info = getActiveOp(o);
+    const statuses = info.statuses || {};
+    const currentStatus = info.index >= 0 ? (statuses['op' + (info.index+1)] || 'Requis') : 'Complété';
+
+    let deadlineClass = '';
+    let deadlineBadge = '';
+    if (info.completed) {
+      deadlineBadge = '<span class="badge badge-green">Terminé</span>';
+    } else if (info.deadline) {
+      const diff = Math.floor((info.deadline - today) / 86400000);
+      if (diff < 0) { deadlineClass = 'color:var(--red);font-weight:500;'; deadlineBadge = `<span class="badge badge-red">${Math.abs(diff)}j retard</span>`; }
+      else if (diff <= 5) { deadlineClass = 'color:var(--amber);'; deadlineBadge = `<span class="badge badge-amber">${diff}j</span>`; }
+      else { deadlineBadge = `<span class="badge badge-green">${diff}j</span>`; }
+    }
+
+    // Progress bar
+    const nbOps = info.nbOps;
+    let progressHtml = '';
+    if (nbOps > 0) {
+      progressHtml = '<div class="timeline-bar">';
+      for (let i = 0; i < nbOps; i++) {
+        const st = statuses['op' + (i+1)] || 'Requis';
+        let cls = '';
+        if (st === 'Complété') cls = 'done';
+        else if (st === 'En cours') cls = 'active';
+        else if (st === 'Bloqué') cls = 'blocked';
+        progressHtml += `<div class="timeline-seg ${cls}"></div>`;
+      }
+      progressHtml += '</div>';
+    }
+
+    // Status select for active op
+    let statusSelect = '';
+    if (info.index >= 0) {
+      const opKey = 'op' + (info.index+1);
+      const sClass = 's-' + currentStatus.toLowerCase().replace(/[éè]/g,'e').replace(/ /g,'');
+      statusSelect = `<select class="status-select ${sClass}" onchange="updateSuiviStatus('${o.commandeItem}','${opKey}',this.value)">
+        <option ${currentStatus==='Requis'?'selected':''}>Requis</option>
+        <option ${currentStatus==='En cours'?'selected':''}>En cours</option>
+        <option ${currentStatus==='Bloqué'?'selected':''}>Bloqué</option>
+        <option ${currentStatus==='Complété'?'selected':''}>Complété</option>
+      </select>`;
+    } else {
+      statusSelect = '<span class="badge badge-green">✓</span>';
+    }
+
+    return `<tr>
+      <td style="color:var(--text);font-weight:500;">${o.commandeItem}</td>
+      <td><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
+      <td style="font-size:12px;">${o.client}</td>
+      <td>${o.dateRequise}</td>
+      <td>${info.index >= 0 ? 'OP'+(info.index+1) : '—'}</td>
+      <td>${info.name}</td>
+      <td style="font-size:11px;color:var(--text3);">${info.detail || '—'}</td>
+      <td style="${deadlineClass}">${info.deadline ? formatDate(info.deadline) : '—'} ${deadlineBadge}</td>
+      <td>${statusSelect}</td>
+      <td style="width:100px;">${progressHtml}</td>
+      <td><button class="btn btn-sm" onclick="openSuiviDetail('${o.commandeItem}')">⋯</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// SUIVI DETAIL MODAL
+// ══════════════════════════════════════════════════════════
+
+function openSuiviDetail(commandeItem) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  const recipe = recipes.find(r => r.partNumber === order.partNumber);
+  const modal = document.getElementById('suivi-modal');
+  document.getElementById('suivi-modal-title').textContent = 'Commande ' + commandeItem;
+
+  if (!recipe) {
+    document.getElementById('suivi-modal-body').innerHTML = '<div style="color:var(--amber);">Aucune recette trouvée pour ' + order.partNumber + '</div>';
+    modal.classList.add('show');
+    return;
+  }
+
+  const statuses = suiviStatuses[commandeItem] || {};
+  const deadlines = computeDeadlines(recipe, order.dateRequise);
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let html = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;font-size:12px;">
+    <div><span style="color:var(--text3);">Client:</span> ${order.client}</div>
+    <div><span style="color:var(--text3);">No Pièce:</span> <span style="font-family:var(--mono);">${order.partNumber}</span></div>
+    <div><span style="color:var(--text3);">Date Requise:</span> ${order.dateRequise}</div>
+    <div><span style="color:var(--text3);">Quantité:</span> ${order.qty}</div>
+    <div><span style="color:var(--text3);">Bon Travail:</span> ${order.workOrder || '—'}</div>
+    <div><span style="color:var(--text3);">Template:</span> ${recipe.template}</div>
+  </div>`;
+
+  html += '<table><thead><tr><th>OP</th><th>Opération</th><th>Détail</th><th>Délai</th><th>Date Limite</th><th>Statut</th></tr></thead><tbody>';
+
+  recipe.ops.forEach((op, i) => {
+    const opKey = 'op' + (i+1);
+    const st = statuses[opKey] || 'Requis';
+    const dl = deadlines[i];
+    const diff = dl ? Math.floor((dl - today) / 86400000) : null;
+    let dlStyle = '';
+    if (st !== 'Complété' && diff !== null) {
+      if (diff < 0) dlStyle = 'color:var(--red);font-weight:500;';
+      else if (diff <= 5) dlStyle = 'color:var(--amber);';
+    }
+    const sClass = 's-' + st.toLowerCase().replace(/[éè]/g,'e').replace(/ /g,'');
+
+    html += `<tr>
+      <td style="font-family:var(--mono);color:var(--text3);">OP${i+1}</td>
+      <td>${op.name}</td>
+      <td style="font-size:11px;color:var(--text3);">${op.detail || '—'}</td>
+      <td style="font-family:var(--mono);font-size:12px;">${op.delay}j</td>
+      <td style="${dlStyle}">${formatDate(dl)}</td>
+      <td><select class="status-select ${sClass}" onchange="updateSuiviStatus('${commandeItem}','${opKey}',this.value);openSuiviDetail('${commandeItem}')">
+        <option ${st==='Requis'?'selected':''}>Requis</option>
+        <option ${st==='En cours'?'selected':''}>En cours</option>
+        <option ${st==='Bloqué'?'selected':''}>Bloqué</option>
+        <option ${st==='Complété'?'selected':''}>Complété</option>
+        <option ${st==='N/A'?'selected':''}>N/A</option>
+      </select></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  if (order.comment) html += `<div style="margin-top:12px;font-size:12px;color:var(--text2);"><strong>Commentaire:</strong> ${order.comment}</div>`;
+
+  document.getElementById('suivi-modal-body').innerHTML = html;
+  modal.classList.add('show');
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD
+// ══════════════════════════════════════════════════════════
+
+function renderDashboard() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const thirtyDaysAgo = new Date(today); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  let active = 0, overdue = 0, blocked = 0, completed = 0;
+  let nextShip = null;
+  const overdueList = [];
+  const upcomingList = [];
+
+  orders.forEach(o => {
+    const info = getActiveOp(o);
+    if (info.completed) {
+      completed++;
+      return;
+    }
+    active++;
+    const st = info.statuses?.['op' + (info.index+1)] || 'Requis';
+    if (st === 'Bloqué') blocked++;
+    if (info.deadline && info.deadline < today) {
+      overdue++;
+      overdueList.push({ order: o, info });
+    }
+    // Upcoming: deadline within 7 days
+    if (info.deadline) {
+      const diff = Math.floor((info.deadline - today) / 86400000);
+      if (diff >= 0 && diff <= 7) upcomingList.push({ order: o, info, diff });
+    }
+    // Next shipment
+    const dr = new Date(o.dateRequise + 'T12:00:00');
+    if (dr >= today && (!nextShip || dr < nextShip)) nextShip = dr;
+  });
+
+  document.getElementById('kpi-active').textContent = active;
+  document.getElementById('kpi-overdue').textContent = overdue;
+  document.getElementById('kpi-blocked').textContent = blocked;
+  document.getElementById('kpi-completed').textContent = completed;
+  document.getElementById('kpi-next-ship').textContent = nextShip ? formatDate(nextShip) : '—';
+
+  // Overdue list
+  const overdueContainer = document.getElementById('dashboard-overdue-list');
+  if (!overdueList.length) {
+    overdueContainer.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-msg">Aucune commande en retard ✓</div></div>';
+  } else {
+    overdueContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Retard</th></tr></thead><tbody>' +
+      overdueList.map(({ order: o, info }) => {
+        const diff = Math.abs(Math.floor((info.deadline - today) / 86400000));
+        return `<tr><td style="color:var(--text);">${o.commandeItem}</td><td>${o.client}</td><td>${info.name}</td><td style="color:var(--red);">${formatDate(info.deadline)}</td><td><span class="badge badge-red">${diff}j</span></td></tr>`;
+      }).join('') + '</tbody></table>';
+  }
+
+  // Upcoming list
+  const upcomingContainer = document.getElementById('dashboard-upcoming-list');
+  if (!upcomingList.length) {
+    upcomingContainer.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-msg">Aucune échéance dans les 7 prochains jours</div></div>';
+  } else {
+    upcomingList.sort((a, b) => a.diff - b.diff);
+    upcomingContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Dans</th></tr></thead><tbody>' +
+      upcomingList.map(({ order: o, info, diff }) => {
+        const badge = diff === 0 ? '<span class="badge badge-amber">Aujourd\'hui</span>' : `<span class="badge badge-amber">${diff}j</span>`;
+        return `<tr><td style="color:var(--text);">${o.commandeItem}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
+      }).join('') + '</tbody></table>';
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════
+
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleDateString('fr-CA') + ' ' + now.toLocaleTimeString('fr-CA', { hour:'2-digit', minute:'2-digit' });
+}
+setInterval(updateClock, 30000);
+updateClock();
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
+
+renderDashboard();
+
+</script>
+</body>
+</html>
