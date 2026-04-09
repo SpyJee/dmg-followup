@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Follow-Up v1</title>
+<title>DMG Aerospace — Production Follow-Up v2</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
   :root {
@@ -161,7 +161,7 @@
   <div class="logo">
     <div class="logo-mark">DMG Aerospace</div>
     <div class="logo-sub">Production Follow-Up</div>
-    <div class="logo-ver">v1</div>
+    <div class="logo-ver">v2</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -440,7 +440,7 @@
 // DMG Aerospace — Production Follow-Up v1
 // ══════════════════════════════════════════════════════════
 
-const API_BASE = ''; // Will be set to Azure Function URL
+const API_BASE = 'https://dmg-followup-proxy.azurewebsites.net/api/followup';
 
 // ── CLIENTS ──
 const CLIENTS = ['Airbus Atlantique','Airbus Canada','Satair','Bombardier','Placeteco','Hutchison','Apex Précision','Bombardier Red Oak'];
@@ -509,10 +509,11 @@ const HOLIDAYS = [
 ];
 const holidaySet = new Set(HOLIDAYS);
 
-// ── DATA STORES (in-memory, will move to Azure Table Storage) ──
-let orders = JSON.parse(localStorage.getItem('dmgfu_orders') || '[]');
-let recipes = JSON.parse(localStorage.getItem('dmgfu_recipes') || '[]');
-let suiviStatuses = JSON.parse(localStorage.getItem('dmgfu_suivi') || '{}'); // key: commandeItem, value: { op1:'Requis', op2:'En cours', ... }
+// ── DATA STORES (loaded from Azure Table Storage) ──
+let orders = [];
+let recipes = [];
+let suiviStatuses = {}; // key: commandeItem, value: { op1:'Requis', op2:'En cours', ... }
+let dataLoaded = false;
 
 // ══════════════════════════════════════════════════════════
 // WORKING DAY CALCULATOR
@@ -632,13 +633,41 @@ function toast(msg, type = 'success') {
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
 
 // ══════════════════════════════════════════════════════════
-// PERSIST (localStorage for Phase 1 — will move to Azure)
+// API HELPERS
 // ══════════════════════════════════════════════════════════
 
-function persist() {
-  localStorage.setItem('dmgfu_orders', JSON.stringify(orders));
-  localStorage.setItem('dmgfu_recipes', JSON.stringify(recipes));
-  localStorage.setItem('dmgfu_suivi', JSON.stringify(suiviStatuses));
+async function apiGet(route) {
+  const res = await fetch(API_BASE + '/' + route);
+  if (!res.ok) throw new Error(`API ${route}: ${res.status}`);
+  return res.json();
+}
+
+async function apiPost(route, body) {
+  const res = await fetch(API_BASE + '/' + route, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`API ${route}: ${res.status}`);
+  return res.json();
+}
+
+async function loadAllData() {
+  try {
+    const [o, r, s] = await Promise.all([
+      apiGet('order-list'),
+      apiGet('recipe-list'),
+      apiGet('suivi-list')
+    ]);
+    orders = o;
+    recipes = r;
+    suiviStatuses = s;
+    dataLoaded = true;
+    renderDashboard();
+  } catch (err) {
+    console.error('Failed to load data:', err);
+    toast('Erreur de chargement des données: ' + err.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════
@@ -672,7 +701,7 @@ function openOrderModal(editKey) {
   modal.classList.add('show');
 }
 
-function saveOrder() {
+async function saveOrder() {
   const po = document.getElementById('order-po').value.trim();
   const item = document.getElementById('order-item').value.trim();
   const client = document.getElementById('order-client').value;
@@ -691,42 +720,54 @@ function saveOrder() {
   const editKey = document.getElementById('order-edit-key').value;
   const recipe = recipes.find(r => r.partNumber === partNumber);
 
-  if (editKey) {
-    const idx = orders.findIndex(x => x.commandeItem === editKey);
-    if (idx >= 0) {
-      orders[idx] = { ...orders[idx], po, item, commandeItem, client, partNumber, dateRequise, qty, workOrder, comment };
-    }
-  } else {
-    if (orders.find(x => x.commandeItem === commandeItem)) {
-      toast('CommandeItem ' + commandeItem + ' existe déjà', 'error');
-      return;
-    }
-    orders.push({ po, item, commandeItem, client, partNumber, dateRequise, qty, workOrder, comment, createdAt: new Date().toISOString() });
-    // Init suivi statuses
-    if (recipe) {
+  if (!editKey && orders.find(x => x.commandeItem === commandeItem)) {
+    toast('CommandeItem ' + commandeItem + ' existe déjà', 'error');
+    return;
+  }
+
+  try {
+    const orderObj = { po, item, commandeItem, client, partNumber, dateRequise, qty, workOrder, comment, createdAt: new Date().toISOString() };
+    await apiPost('order-save', orderObj);
+
+    // Init suivi statuses for new orders
+    if (!editKey && recipe) {
       const statuses = {};
       recipe.ops.forEach((op, i) => { statuses['op' + (i+1)] = 'Requis'; });
+      await apiPost('suivi-update', { commandeItem, statuses });
       suiviStatuses[commandeItem] = statuses;
     }
-  }
 
-  if (!recipe) {
-    document.getElementById('order-recipe-status').innerHTML = '<span style="color:var(--amber)">⚠ Aucune recette trouvée pour ' + partNumber + '. Créez-la dans Recettes.</span>';
-  }
+    // Update local data
+    if (editKey) {
+      const idx = orders.findIndex(x => x.commandeItem === editKey);
+      if (idx >= 0) orders[idx] = { ...orders[idx], ...orderObj };
+    } else {
+      orders.push(orderObj);
+    }
 
-  persist();
-  closeModal('order-modal');
-  toast(editKey ? 'Commande modifiée' : 'Commande créée');
-  renderOrders();
+    if (!recipe) {
+      document.getElementById('order-recipe-status').innerHTML = '<span style="color:var(--amber)">⚠ Aucune recette trouvée pour ' + partNumber + '. Créez-la dans Recettes.</span>';
+    }
+
+    closeModal('order-modal');
+    toast(editKey ? 'Commande modifiée' : 'Commande créée');
+    renderOrders();
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
 }
 
-function deleteOrder(commandeItem) {
+async function deleteOrder(commandeItem) {
   if (!confirm('Supprimer la commande ' + commandeItem + ' ?')) return;
-  orders = orders.filter(x => x.commandeItem !== commandeItem);
-  delete suiviStatuses[commandeItem];
-  persist();
-  renderOrders();
-  toast('Commande supprimée');
+  try {
+    await apiPost('order-delete', { commandeItem });
+    orders = orders.filter(x => x.commandeItem !== commandeItem);
+    delete suiviStatuses[commandeItem];
+    renderOrders();
+    toast('Commande supprimée');
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
 }
 
 function renderOrders() {
@@ -845,7 +886,7 @@ function removeOpRow(i) {
   renderOpsEditor();
 }
 
-function saveRecipe() {
+async function saveRecipe() {
   const partNumber = document.getElementById('recipe-part').value.trim();
   const template = document.getElementById('recipe-template').value;
   if (!partNumber) { toast('No Pièce requis', 'error'); return; }
@@ -863,29 +904,39 @@ function saveRecipe() {
     totalDelay: editingOps.reduce((s, o) => s + (o.delay || 0), 0)
   };
 
-  if (editKey) {
-    const idx = recipes.findIndex(x => x.partNumber === editKey);
-    if (idx >= 0) recipes[idx] = recipeObj;
-  } else {
-    if (recipes.find(x => x.partNumber === partNumber)) {
-      toast('Recette pour ' + partNumber + ' existe déjà', 'error');
-      return;
-    }
-    recipes.push(recipeObj);
+  if (!editKey && recipes.find(x => x.partNumber === partNumber)) {
+    toast('Recette pour ' + partNumber + ' existe déjà', 'error');
+    return;
   }
 
-  persist();
-  closeModal('recipe-modal');
-  toast(editKey ? 'Recette modifiée' : 'Recette créée');
-  renderRecipes();
+  try {
+    await apiPost('recipe-save', recipeObj);
+
+    if (editKey) {
+      const idx = recipes.findIndex(x => x.partNumber === editKey);
+      if (idx >= 0) recipes[idx] = recipeObj;
+    } else {
+      recipes.push(recipeObj);
+    }
+
+    closeModal('recipe-modal');
+    toast(editKey ? 'Recette modifiée' : 'Recette créée');
+    renderRecipes();
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
 }
 
-function deleteRecipe(partNumber) {
+async function deleteRecipe(partNumber) {
   if (!confirm('Supprimer la recette pour ' + partNumber + ' ?')) return;
-  recipes = recipes.filter(x => x.partNumber !== partNumber);
-  persist();
-  renderRecipes();
-  toast('Recette supprimée');
+  try {
+    await apiPost('recipe-delete', { partNumber });
+    recipes = recipes.filter(x => x.partNumber !== partNumber);
+    renderRecipes();
+    toast('Recette supprimée');
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
 }
 
 function renderRecipes() {
@@ -994,11 +1045,15 @@ function getActiveOp(order) {
   return { index: -1, name: 'Terminé', detail: '', deadline: null, nbOps: recipe.ops.length, recipe, deadlines, statuses, completed: true };
 }
 
-function updateSuiviStatus(commandeItem, opKey, value) {
+async function updateSuiviStatus(commandeItem, opKey, value) {
   if (!suiviStatuses[commandeItem]) suiviStatuses[commandeItem] = {};
   suiviStatuses[commandeItem][opKey] = value;
-  persist();
   renderSuivi();
+  try {
+    await apiPost('suivi-update', { commandeItem, statuses: suiviStatuses[commandeItem] });
+  } catch (err) {
+    toast('Erreur sauvegarde statut: ' + err.message, 'error');
+  }
 }
 
 function renderSuivi() {
@@ -1246,7 +1301,7 @@ updateClock();
 // INIT
 // ══════════════════════════════════════════════════════════
 
-renderDashboard();
+loadAllData();
 
 </script>
 </body>
