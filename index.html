@@ -720,6 +720,22 @@ async function loadAllData() {
 }
 
 // ══════════════════════════════════════════════════════════
+// ROLLING 3-MONTH FILTER
+// ══════════════════════════════════════════════════════════
+
+function getActiveOrders() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const cutoff = new Date(today);
+  cutoff.setMonth(cutoff.getMonth() + 3);
+  return orders.filter(o => {
+    if (!o.dateRequise) return true; // no date = show it
+    const dr = new Date(o.dateRequise + 'T12:00:00');
+    // Show overdue (past due) + next 3 months
+    return dr <= cutoff;
+  });
+}
+
+// ══════════════════════════════════════════════════════════
 // ORDERS — CRUD
 // ══════════════════════════════════════════════════════════
 
@@ -841,7 +857,7 @@ async function deleteOrder(commandeItem) {
 
 function renderOrders() {
   const search = (document.getElementById('order-search')?.value || '').toLowerCase();
-  const filtered = orders.filter(o => {
+  const filtered = getActiveOrders().filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search) && !o.client.toLowerCase().includes(search)) return false;
     return true;
   });
@@ -1178,7 +1194,7 @@ function renderSuivi() {
     CLIENTS.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; clientSelect.appendChild(opt); });
   }
 
-  let filtered = orders.filter(o => {
+  let filtered = getActiveOrders().filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
     if (clientFilter && o.client !== clientFilter) return false;
     const info = getActiveOp(o);
@@ -1405,7 +1421,7 @@ function renderDashboard() {
   }
   const weekLabels = Object.keys(byWeek);
 
-  orders.forEach(o => {
+  getActiveOrders().forEach(o => {
     const info = getActiveOp(o);
     byClient[o.client] = (byClient[o.client] || 0) + 1;
 
@@ -1566,7 +1582,7 @@ function exportSuiviPDF() {
 
   // Rows
   doc.setFontSize(7);
-  const sortedOrders = [...orders].sort((a, b) => {
+  const sortedOrders = [...getActiveOrders()].sort((a, b) => {
     const ia = getActiveOp(a), ib = getActiveOp(b);
     const da = ia.deadline ? ia.deadline.getTime() : Infinity;
     const db = ib.deadline ? ib.deadline.getTime() : Infinity;
