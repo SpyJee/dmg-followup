@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Follow-Up v4</title>
+<title>DMG Aerospace — Production Follow-Up v5</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -188,7 +188,7 @@
   <div class="logo">
     <div class="logo-mark">DMG Aerospace</div>
     <div class="logo-sub">Production Follow-Up</div>
-    <div class="logo-ver">v4</div>
+    <div class="logo-ver">v5</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -394,14 +394,16 @@
         <label class="form-label">Client</label>
         <select class="form-select" id="order-client">
           <option value="">— Sélectionner —</option>
-          <option>Airbus Atlantique</option>
-          <option>Airbus Canada</option>
-          <option>Satair</option>
-          <option>Bombardier</option>
-          <option>Placeteco</option>
-          <option>Hutchison</option>
-          <option>Apex Précision</option>
-          <option>Bombardier Red Oak</option>
+          <option>AIRBUS CANADA</option>
+          <option>AIRBUS ATLANTIQUE CANADA INC.</option>
+          <option>AIRBUS U.S A220 INC.</option>
+          <option>BOMBARDIER INC.</option>
+          <option>BOMBARDIER US AEROSTRUCTURES</option>
+          <option>LEARJET INC.</option>
+          <option>PLACETECO INC.</option>
+          <option>SATAIR USA INC.</option>
+          <option>CVTCORP</option>
+          <option>FIGEAC AERO France</option>
         </select>
       </div>
       <div class="form-group">
@@ -490,7 +492,7 @@
 const API_BASE = 'https://dmg-followup-proxy.azurewebsites.net/api/followup';
 
 // ── CLIENTS ──
-const CLIENTS = ['Airbus Atlantique','Airbus Canada','Satair','Bombardier','Placeteco','Hutchison','Apex Précision','Bombardier Red Oak'];
+const CLIENTS = ['AIRBUS CANADA','AIRBUS ATLANTIQUE CANADA INC.','AIRBUS U.S A220 INC.','BOMBARDIER INC.','BOMBARDIER US AEROSTRUCTURES','LEARJET INC.','PLACETECO INC.','SATAIR USA INC.','CVTCORP','FIGEAC AERO France','Hutchison','Apex Précision'];
 
 // ── OPERATIONS CATALOGUE ──
 const OPS_CATALOGUE = ['Commande Matière','Coupe','Usinage','Ébavurage','Sous-traitance','Assemblage','Inspection','Identification','Expédition'];
