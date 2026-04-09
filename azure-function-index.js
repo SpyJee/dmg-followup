@@ -310,7 +310,17 @@ async function ensureTable(account, key, name) {
 }
 
 async function tableUpsert(account, key, table, entity) {
-  const pk = encodeURIComponent(entity.PartitionKey);
-  const rk = encodeURIComponent(entity.RowKey);
-  await tableReq(account, key, 'PUT', `/${table}(PartitionKey='${pk}',RowKey='${rk}')`, entity, { 'If-Match': '*' });
+  // Try insert first, then merge on conflict
+  try {
+    await tableReq(account, key, 'POST', `/${table}`, entity);
+  } catch (e) {
+    if (e.message && e.message.includes('409')) {
+      // Entity exists — merge update
+      const pk = encodeURIComponent(entity.PartitionKey);
+      const rk = encodeURIComponent(entity.RowKey);
+      await tableReq(account, key, 'PUT', `/${table}(PartitionKey='${pk}',RowKey='${rk}')`, entity, { 'If-Match': '*' });
+    } else {
+      throw e;
+    }
+  }
 }
