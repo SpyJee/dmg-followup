@@ -3,8 +3,10 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Follow-Up v2</title>
+<title>DMG Aerospace — Production Follow-Up v3</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   :root {
     --bg:#0a1628; --bg2:#0f1d33; --bg3:#162540; --bg4:#1d2e4d; --bg5:#24375a;
@@ -145,6 +147,27 @@
   .filter-bar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
   .filter-bar .form-input,.filter-bar .form-select{width:auto;min-width:140px;}
 
+  /* ROW HIGHLIGHTS */
+  tr.row-overdue td{background:rgba(229,83,75,0.06);}
+  tr.row-blocked td{background:rgba(232,184,74,0.06);}
+  tr.row-completed td{opacity:0.5;}
+
+  /* SORTABLE HEADERS */
+  th.sortable{cursor:pointer;user-select:none;}
+  th.sortable:hover{color:var(--accent);}
+  th.sortable::after{content:'';margin-left:4px;font-size:10px;}
+  th.sort-asc::after{content:' ▲';}
+  th.sort-desc::after{content:' ▼';}
+
+  /* CHART CONTAINERS */
+  .chart-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
+  .chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--rl);padding:16px;}
+  .chart-card canvas{max-height:220px;}
+  @media(max-width:900px){.chart-row{grid-template-columns:1fr;}}
+
+  /* EXPORT BAR */
+  .export-bar{display:flex;gap:8px;margin-bottom:12px;}
+
   /* RESPONSIVE */
   @media(max-width:900px){
     .sidebar{width:56px;min-width:56px;}
@@ -161,7 +184,7 @@
   <div class="logo">
     <div class="logo-mark">DMG Aerospace</div>
     <div class="logo-sub">Production Follow-Up</div>
-    <div class="logo-ver">v2</div>
+    <div class="logo-ver">v3</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -198,6 +221,14 @@
         <div class="kpi"><div class="kpi-label">Complétées (30j)</div><div class="kpi-val" id="kpi-completed" style="color:var(--green)">—</div></div>
         <div class="kpi"><div class="kpi-label">Prochaine expédition</div><div class="kpi-val" id="kpi-next-ship" style="font-size:16px;">—</div></div>
       </div>
+      <div class="chart-row">
+        <div class="chart-card"><div class="card-title">Commandes par client</div><canvas id="chart-by-client"></canvas></div>
+        <div class="chart-card"><div class="card-title">Distribution des statuts</div><canvas id="chart-status"></canvas></div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-card"><div class="card-title">Opérations en cours par type</div><canvas id="chart-ops"></canvas></div>
+        <div class="chart-card"><div class="card-title">Échéances — prochaines 4 semaines</div><canvas id="chart-timeline"></canvas></div>
+      </div>
       <div class="card">
         <div class="card-title">Commandes en retard</div>
         <div id="dashboard-overdue-list">
@@ -224,7 +255,18 @@
           <option value="on-time">En temps</option>
           <option value="overdue">En retard</option>
           <option value="blocked">Bloqué</option>
+          <option value="completed">Terminé</option>
         </select>
+        <select class="form-select" id="suivi-sort" onchange="renderSuivi()" style="width:150px;">
+          <option value="deadline-asc">Échéance (proche)</option>
+          <option value="deadline-desc">Échéance (loin)</option>
+          <option value="client">Client</option>
+          <option value="commande">No Commande</option>
+          <option value="status">Statut (retard d'abord)</option>
+        </select>
+        <div style="flex:1;"></div>
+        <button class="btn btn-sm" onclick="exportSuiviPDF()">PDF</button>
+        <button class="btn btn-sm" onclick="refreshData()">Rafraîchir</button>
       </div>
       <div class="card" style="padding:0;overflow-x:auto;">
         <table id="suivi-table">
@@ -1078,8 +1120,46 @@ function renderSuivi() {
       const st = info.statuses?.['op' + (info.index+1)] || '';
       if (st !== 'Bloqué') return false;
     }
-    if (statusFilter === 'on-time' && info.deadline && info.deadline < today) return false;
+    if (statusFilter === 'on-time') {
+      if (info.completed) return false;
+      if (info.deadline && info.deadline < today) return false;
+    }
+    if (statusFilter === 'completed' && !info.completed) return false;
     return true;
+  });
+
+  // Sorting
+  const sortBy = document.getElementById('suivi-sort')?.value || 'deadline-asc';
+  filtered = filtered.map(o => ({ order: o, info: getActiveOp(o) }));
+
+  filtered.sort((a, b) => {
+    if (sortBy === 'deadline-asc') {
+      if (a.info.completed && !b.info.completed) return 1;
+      if (!a.info.completed && b.info.completed) return -1;
+      const da = a.info.deadline ? a.info.deadline.getTime() : Infinity;
+      const db = b.info.deadline ? b.info.deadline.getTime() : Infinity;
+      return da - db;
+    }
+    if (sortBy === 'deadline-desc') {
+      const da = a.info.deadline ? a.info.deadline.getTime() : 0;
+      const db = b.info.deadline ? b.info.deadline.getTime() : 0;
+      return db - da;
+    }
+    if (sortBy === 'client') return a.order.client.localeCompare(b.order.client);
+    if (sortBy === 'commande') return a.order.commandeItem.localeCompare(b.order.commandeItem);
+    if (sortBy === 'status') {
+      // overdue first, then blocked, then en cours, then requis, then completed
+      const priority = (item) => {
+        if (item.info.completed) return 4;
+        const st = item.info.statuses?.['op' + (item.info.index+1)] || 'Requis';
+        if (item.info.deadline && item.info.deadline < today) return 0;
+        if (st === 'Bloqué') return 1;
+        if (st === 'En cours') return 2;
+        return 3;
+      };
+      return priority(a) - priority(b);
+    }
+    return 0;
   });
 
   const tbody = document.getElementById('suivi-body');
@@ -1088,8 +1168,7 @@ function renderSuivi() {
     return;
   }
 
-  tbody.innerHTML = filtered.map(o => {
-    const info = getActiveOp(o);
+  tbody.innerHTML = filtered.map(({ order: o, info }) => {
     const statuses = info.statuses || {};
     const currentStatus = info.index >= 0 ? (statuses['op' + (info.index+1)] || 'Requis') : 'Complété';
 
@@ -1135,7 +1214,13 @@ function renderSuivi() {
       statusSelect = '<span class="badge badge-green">✓</span>';
     }
 
-    return `<tr>
+    // Row class for highlighting
+    let rowClass = '';
+    if (info.completed) rowClass = 'row-completed';
+    else if (currentStatus === 'Bloqué') rowClass = 'row-blocked';
+    else if (info.deadline && info.deadline < today) rowClass = 'row-overdue';
+
+    return `<tr class="${rowClass}">
       <td style="color:var(--text);font-weight:500;">${o.commandeItem}</td>
       <td><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="font-size:12px;">${o.client}</td>
@@ -1222,32 +1307,68 @@ function openSuiviDetail(commandeItem) {
 // DASHBOARD
 // ══════════════════════════════════════════════════════════
 
+let chartInstances = {};
+
+function destroyChart(id) {
+  if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; }
+}
+
+const CHART_COLORS = ['#d4a843','#3ecf8e','#e5534b','#9b8afb','#2dd4bf','#e8b84a','#4f8ef7','#f97583'];
+
 function renderDashboard() {
   const today = new Date(); today.setHours(0,0,0,0);
-  const thirtyDaysAgo = new Date(today); thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
   let active = 0, overdue = 0, blocked = 0, completed = 0;
   let nextShip = null;
   const overdueList = [];
   const upcomingList = [];
+  const byClient = {};
+  const byStatus = { 'En temps': 0, 'En retard': 0, 'Bloqué': 0, 'Terminé': 0 };
+  const byOp = {};
+  const byWeek = {};
+
+  // Build week buckets for next 4 weeks
+  for (let w = 0; w < 4; w++) {
+    const wStart = new Date(today);
+    wStart.setDate(wStart.getDate() + w * 7);
+    const wEnd = new Date(wStart);
+    wEnd.setDate(wEnd.getDate() + 6);
+    const label = formatDateShort(wStart) + '–' + formatDateShort(wEnd);
+    byWeek[label] = 0;
+  }
+  const weekLabels = Object.keys(byWeek);
 
   orders.forEach(o => {
     const info = getActiveOp(o);
+    byClient[o.client] = (byClient[o.client] || 0) + 1;
+
     if (info.completed) {
       completed++;
+      byStatus['Terminé']++;
       return;
     }
     active++;
     const st = info.statuses?.['op' + (info.index+1)] || 'Requis';
-    if (st === 'Bloqué') blocked++;
+    if (st === 'Bloqué') { blocked++; byStatus['Bloqué']++; }
+    else if (info.deadline && info.deadline < today) { byStatus['En retard']++; }
+    else { byStatus['En temps']++; }
+
     if (info.deadline && info.deadline < today) {
       overdue++;
       overdueList.push({ order: o, info });
     }
-    // Upcoming: deadline within 7 days
     if (info.deadline) {
       const diff = Math.floor((info.deadline - today) / 86400000);
       if (diff >= 0 && diff <= 7) upcomingList.push({ order: o, info, diff });
+      // Week bucket
+      if (diff >= 0 && diff < 28) {
+        const weekIdx = Math.floor(diff / 7);
+        if (weekIdx < 4) byWeek[weekLabels[weekIdx]]++;
+      }
+    }
+    // Active op type
+    if (info.name && info.name !== '—') {
+      byOp[info.name] = (byOp[info.name] || 0) + 1;
     }
     // Next shipment
     const dr = new Date(o.dateRequise + 'T12:00:00');
@@ -1260,10 +1381,65 @@ function renderDashboard() {
   document.getElementById('kpi-completed').textContent = completed;
   document.getElementById('kpi-next-ship').textContent = nextShip ? formatDate(nextShip) : '—';
 
-  // Overdue list
+  // ── CHARTS ──
+  if (typeof Chart !== 'undefined') {
+    const chartDefaults = { color: '#8a9bb8', borderColor: 'rgba(255,255,255,0.08)' };
+    Chart.defaults.color = chartDefaults.color;
+    Chart.defaults.borderColor = chartDefaults.borderColor;
+
+    // By Client (horizontal bar)
+    destroyChart('byClient');
+    const clientLabels = Object.keys(byClient);
+    chartInstances.byClient = new Chart(document.getElementById('chart-by-client'), {
+      type: 'bar',
+      data: {
+        labels: clientLabels,
+        datasets: [{ data: clientLabels.map(c => byClient[c]), backgroundColor: CHART_COLORS.slice(0, clientLabels.length), borderRadius: 4 }]
+      },
+      options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+
+    // Status distribution (doughnut)
+    destroyChart('status');
+    const statusLabels = Object.keys(byStatus);
+    const statusColors = ['#3ecf8e','#e5534b','#e8b84a','#506380'];
+    chartInstances.status = new Chart(document.getElementById('chart-status'), {
+      type: 'doughnut',
+      data: {
+        labels: statusLabels,
+        datasets: [{ data: statusLabels.map(s => byStatus[s]), backgroundColor: statusColors, borderWidth: 0 }]
+      },
+      options: { plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } } }, cutout: '60%' }
+    });
+
+    // Active ops by type (bar)
+    destroyChart('ops');
+    const opLabels = Object.keys(byOp).sort((a,b) => byOp[b] - byOp[a]);
+    chartInstances.ops = new Chart(document.getElementById('chart-ops'), {
+      type: 'bar',
+      data: {
+        labels: opLabels,
+        datasets: [{ data: opLabels.map(o => byOp[o]), backgroundColor: '#d4a843', borderRadius: 4 }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+
+    // Timeline (next 4 weeks)
+    destroyChart('timeline');
+    chartInstances.timeline = new Chart(document.getElementById('chart-timeline'), {
+      type: 'bar',
+      data: {
+        labels: weekLabels,
+        datasets: [{ label: 'Échéances', data: weekLabels.map(w => byWeek[w]), backgroundColor: '#4f8ef7', borderRadius: 4 }]
+      },
+      options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+    });
+  }
+
+  // ── OVERDUE LIST ──
   const overdueContainer = document.getElementById('dashboard-overdue-list');
   if (!overdueList.length) {
-    overdueContainer.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-msg">Aucune commande en retard ✓</div></div>';
+    overdueContainer.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-msg">Aucune commande en retard</div></div>';
   } else {
     overdueContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Retard</th></tr></thead><tbody>' +
       overdueList.map(({ order: o, info }) => {
@@ -1272,7 +1448,7 @@ function renderDashboard() {
       }).join('') + '</tbody></table>';
   }
 
-  // Upcoming list
+  // ── UPCOMING LIST ──
   const upcomingContainer = document.getElementById('dashboard-upcoming-list');
   if (!upcomingList.length) {
     upcomingContainer.innerHTML = '<div class="empty-state" style="padding:20px;"><div class="empty-state-msg">Aucune échéance dans les 7 prochains jours</div></div>';
@@ -1284,6 +1460,120 @@ function renderDashboard() {
         return `<tr><td style="color:var(--text);">${o.commandeItem}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
       }).join('') + '</tbody></table>';
   }
+}
+
+// ══════════════════════════════════════════════════════════
+// PDF EXPORT
+// ══════════════════════════════════════════════════════════
+
+function exportSuiviPDF() {
+  if (typeof jspdf === 'undefined') { toast('jsPDF non chargé', 'error'); return; }
+  const { jsPDF } = jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  const today = new Date();
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  // Header
+  doc.setFillColor(10, 22, 40);
+  doc.rect(0, 0, pageW, 18, 'F');
+  doc.setTextColor(212, 168, 67);
+  doc.setFontSize(14);
+  doc.text('DMG Aerospace — Suivi Production', 10, 12);
+  doc.setTextColor(138, 155, 184);
+  doc.setFontSize(9);
+  doc.text(today.toLocaleDateString('fr-CA') + ' ' + today.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }), pageW - 10, 12, { align: 'right' });
+
+  // Table header
+  const cols = ['Commande', 'No Pièce', 'Client', 'Date Requise', 'OP Active', 'Description', 'Détail', 'Date Limite', 'Statut'];
+  const colW = [32, 30, 28, 22, 16, 24, 30, 22, 18];
+  let y = 24;
+
+  doc.setFillColor(15, 29, 51);
+  doc.rect(8, y - 4, pageW - 16, 7, 'F');
+  doc.setTextColor(138, 155, 184);
+  doc.setFontSize(7);
+  let x = 10;
+  cols.forEach((c, i) => { doc.text(c, x, y); x += colW[i]; });
+  y += 5;
+
+  // Rows
+  doc.setFontSize(7);
+  const sortedOrders = [...orders].sort((a, b) => {
+    const ia = getActiveOp(a), ib = getActiveOp(b);
+    const da = ia.deadline ? ia.deadline.getTime() : Infinity;
+    const db = ib.deadline ? ib.deadline.getTime() : Infinity;
+    return da - db;
+  });
+
+  sortedOrders.forEach(o => {
+    if (y > pageH - 12) {
+      doc.addPage();
+      y = 14;
+      doc.setFillColor(15, 29, 51);
+      doc.rect(8, y - 4, pageW - 16, 7, 'F');
+      doc.setTextColor(138, 155, 184);
+      doc.setFontSize(7);
+      x = 10;
+      cols.forEach((c, i) => { doc.text(c, x, y); x += colW[i]; });
+      y += 5;
+      doc.setFontSize(7);
+    }
+
+    const info = getActiveOp(o);
+    const statuses = info.statuses || {};
+    const currentStatus = info.index >= 0 ? (statuses['op' + (info.index + 1)] || 'Requis') : 'Terminé';
+
+    // Row background for overdue
+    if (!info.completed && info.deadline && info.deadline < today) {
+      doc.setFillColor(229, 83, 75, 15);
+      doc.rect(8, y - 3.5, pageW - 16, 5, 'F');
+    }
+
+    doc.setTextColor(230, 236, 245);
+    x = 10;
+    const row = [
+      o.commandeItem, o.partNumber, o.client, o.dateRequise,
+      info.index >= 0 ? 'OP' + (info.index + 1) : '—',
+      info.name, (info.detail || '—').substring(0, 20),
+      info.deadline ? formatDate(info.deadline) : '—',
+      currentStatus
+    ];
+    row.forEach((val, i) => {
+      // Color overdue deadline
+      if (i === 7 && !info.completed && info.deadline && info.deadline < today) {
+        doc.setTextColor(229, 83, 75);
+      } else if (i === 8) {
+        if (currentStatus === 'Bloqué') doc.setTextColor(232, 184, 74);
+        else if (currentStatus === 'Complété' || currentStatus === 'Terminé') doc.setTextColor(62, 207, 142);
+        else doc.setTextColor(230, 236, 245);
+      } else {
+        doc.setTextColor(230, 236, 245);
+      }
+      doc.text(String(val).substring(0, 22), x, y);
+      x += colW[i];
+    });
+    y += 5;
+  });
+
+  // Footer
+  doc.setTextColor(80, 99, 128);
+  doc.setFontSize(7);
+  doc.text('Usinage mécanique DMG inc. — Généré automatiquement', 10, pageH - 5);
+  doc.text('Page 1/' + doc.internal.getNumberOfPages(), pageW - 10, pageH - 5, { align: 'right' });
+
+  doc.save('suivi-production-' + today.toISOString().slice(0, 10) + '.pdf');
+  toast('PDF exporté');
+}
+
+// ══════════════════════════════════════════════════════════
+// REFRESH DATA
+// ══════════════════════════════════════════════════════════
+
+async function refreshData() {
+  toast('Rafraîchissement...', 'info');
+  await loadAllData();
+  toast('Données à jour');
 }
 
 // ══════════════════════════════════════════════════════════
