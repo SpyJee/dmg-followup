@@ -250,18 +250,19 @@
     <!-- ─── SUIVI PRODUCTION ─── -->
     <div class="page" id="page-suivi">
       <div class="filter-bar">
-        <input type="text" class="form-input" placeholder="Rechercher..." id="suivi-search" oninput="renderSuivi()" style="width:200px;"/>
-        <select class="form-select" id="suivi-client-filter" onchange="renderSuivi()" style="width:170px;">
+        <input type="text" class="form-input" placeholder="Rechercher..." id="suivi-search" oninput="suiviPage=0;renderSuivi()" style="width:200px;"/>
+        <select class="form-select" id="suivi-client-filter" onchange="suiviPage=0;renderSuivi()" style="width:170px;">
           <option value="">Tous les clients</option>
         </select>
-        <select class="form-select" id="suivi-status-filter" onchange="renderSuivi()" style="width:150px;">
+        <select class="form-select" id="suivi-status-filter" onchange="suiviPage=0;renderSuivi()" style="width:150px;">
           <option value="">Tous les statuts</option>
           <option value="on-time">En temps</option>
           <option value="overdue">En retard</option>
           <option value="blocked">Bloqué</option>
           <option value="completed">Terminé</option>
+          <option value="archived">Archivées</option>
         </select>
-        <select class="form-select" id="suivi-sort" onchange="renderSuivi()" style="width:150px;">
+        <select class="form-select" id="suivi-sort" onchange="suiviPage=0;renderSuivi()" style="width:150px;">
           <option value="deadline-asc">Échéance (proche)</option>
           <option value="deadline-desc">Échéance (loin)</option>
           <option value="client">Client</option>
@@ -286,14 +287,14 @@
               <th>Date Limite</th>
               <th>Statut</th>
               <th>Progression</th>
-              <th></th>
             </tr>
           </thead>
           <tbody id="suivi-body">
-            <tr><td colspan="11" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
+            <tr><td colspan="10" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
           </tbody>
         </table>
       </div>
+      <div id="suivi-pagination"></div>
     </div>
 
     <!-- ─── COMMANDES ─── -->
@@ -475,7 +476,7 @@
   <div class="modal" style="max-width:800px;">
     <div class="modal-title" id="suivi-modal-title">Détail commande</div>
     <div id="suivi-modal-body"></div>
-    <div class="modal-actions">
+    <div class="modal-actions" id="suivi-modal-actions">
       <button class="btn" onclick="closeModal('suivi-modal')">Fermer</button>
     </div>
   </div>
@@ -562,6 +563,8 @@ const holidaySet = new Set(HOLIDAYS);
 let orders = [];
 let recipes = [];
 let suiviStatuses = {}; // key: commandeItem, value: { op1:'Requis', op2:'En cours', ... }
+let suiviPage = 0;
+const SUIVI_PAGE_SIZE = 50;
 let dataLoaded = false;
 
 // ══════════════════════════════════════════════════════════
@@ -728,11 +731,16 @@ function getActiveOrders() {
   const cutoff = new Date(today);
   cutoff.setMonth(cutoff.getMonth() + 3);
   return orders.filter(o => {
+    if (o.archived) return false; // skip archived
     if (!o.dateRequise) return true; // no date = show it
     const dr = new Date(o.dateRequise + 'T12:00:00');
     // Show overdue (past due) + next 3 months
     return dr <= cutoff;
   });
+}
+
+function getArchivedOrders() {
+  return orders.filter(o => o.archived);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1194,9 +1202,11 @@ function renderSuivi() {
     CLIENTS.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; clientSelect.appendChild(opt); });
   }
 
-  let filtered = getActiveOrders().filter(o => {
+  const sourceOrders = statusFilter === 'archived' ? getArchivedOrders() : getActiveOrders();
+  let filtered = sourceOrders.filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
     if (clientFilter && o.client !== clientFilter) return false;
+    if (statusFilter === 'archived') return true; // already filtered
     const info = getActiveOp(o);
     if (statusFilter === 'overdue' && (!info.deadline || info.deadline >= today)) return false;
     if (statusFilter === 'blocked') {
@@ -1247,11 +1257,33 @@ function renderSuivi() {
 
   const tbody = document.getElementById('suivi-body');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="empty-state-msg">Aucune commande trouvée</div></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-msg">Aucune commande trouvée</div></div></td></tr>';
+    document.getElementById('suivi-pagination').innerHTML = '';
     return;
   }
 
-  tbody.innerHTML = filtered.map(({ order: o, info }) => {
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / SUIVI_PAGE_SIZE);
+  if (suiviPage >= totalPages) suiviPage = totalPages - 1;
+  if (suiviPage < 0) suiviPage = 0;
+  const pageStart = suiviPage * SUIVI_PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + SUIVI_PAGE_SIZE);
+
+  // Pagination controls
+  const pagDiv = document.getElementById('suivi-pagination');
+  if (totalPages > 1) {
+    pagDiv.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;font-size:12px;">
+      <button class="btn btn-sm" onclick="suiviPage=0;renderSuivi()" ${suiviPage===0?'disabled':''}>«</button>
+      <button class="btn btn-sm" onclick="suiviPage--;renderSuivi()" ${suiviPage===0?'disabled':''}>‹</button>
+      <span style="color:var(--text2);">Page ${suiviPage+1} / ${totalPages} — ${filtered.length} commandes</span>
+      <button class="btn btn-sm" onclick="suiviPage++;renderSuivi()" ${suiviPage>=totalPages-1?'disabled':''}>›</button>
+      <button class="btn btn-sm" onclick="suiviPage=${totalPages-1};renderSuivi()" ${suiviPage>=totalPages-1?'disabled':''}>»</button>
+    </div>`;
+  } else {
+    pagDiv.innerHTML = `<div style="text-align:center;padding:8px;font-size:12px;color:var(--text3);">${filtered.length} commandes</div>`;
+  }
+
+  tbody.innerHTML = pageItems.map(({ order: o, info }) => {
     const statuses = info.statuses || {};
     const currentStatus = info.index >= 0 ? (statuses['op' + (info.index+1)] || 'Requis') : 'Complété';
 
@@ -1287,7 +1319,7 @@ function renderSuivi() {
     if (info.index >= 0) {
       const opKey = 'op' + (info.index+1);
       const sClass = 's-' + currentStatus.toLowerCase().replace(/[éè]/g,'e').replace(/ /g,'');
-      statusSelect = `<select class="status-select ${sClass}" onchange="updateSuiviStatus('${o.commandeItem}','${opKey}',this.value)">
+      statusSelect = `<select class="status-select ${sClass}" onclick="event.stopPropagation()" onchange="updateSuiviStatus('${o.commandeItem}','${opKey}',this.value)">
         <option ${currentStatus==='Requis'?'selected':''}>Requis</option>
         <option ${currentStatus==='En cours'?'selected':''}>En cours</option>
         <option ${currentStatus==='Bloqué'?'selected':''}>Bloqué</option>
@@ -1305,7 +1337,7 @@ function renderSuivi() {
     else if (currentStatus === 'Bloqué') rowClass = 'row-blocked';
     else if (info.deadline && info.deadline < today) rowClass = 'row-overdue';
 
-    return `<tr class="${rowClass}">
+    return `<tr class="${rowClass}" onclick="openSuiviDetail('${o.commandeItem}')" style="cursor:pointer;">
       <td style="color:var(--text);font-weight:500;white-space:nowrap;">${o.commandeItem}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="font-size:12px;white-space:nowrap;">${o.client}</td>
@@ -1316,7 +1348,6 @@ function renderSuivi() {
       <td style="white-space:nowrap;${deadlineClass}">${info.deadline ? formatDate(info.deadline) : '—'} ${deadlineBadge}</td>
       <td>${statusSelect}</td>
       <td style="width:100px;">${progressHtml}</td>
-      <td><button class="btn btn-sm" onclick="openSuiviDetail('${o.commandeItem}')">⋯</button></td>
     </tr>`;
   }).join('');
 }
@@ -1382,10 +1413,56 @@ function openSuiviDetail(commandeItem) {
   });
 
   html += '</tbody></table>';
-  if (order.comment) html += `<div style="margin-top:12px;font-size:12px;color:var(--text2);"><strong>Commentaire:</strong> ${order.comment}</div>`;
+
+  // Editable notes section
+  const escaped = (order.comment || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  html += `<div style="margin-top:16px;">
+    <label style="font-size:12px;color:var(--text3);font-weight:500;">Notes / Commentaires</label>
+    <textarea id="suivi-note-input" style="width:100%;min-height:80px;margin-top:6px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);padding:8px;font-size:12px;font-family:inherit;resize:vertical;">${escaped}</textarea>
+    <button class="btn btn-sm" style="margin-top:6px;" onclick="saveSuiviNote('${commandeItem}')">Sauvegarder note</button>
+  </div>`;
 
   document.getElementById('suivi-modal-body').innerHTML = html;
+
+  // Archive/unarchive button in modal actions
+  const actions = document.getElementById('suivi-modal-actions');
+  const existingArchBtn = document.getElementById('suivi-archive-btn');
+  if (existingArchBtn) existingArchBtn.remove();
+  if (order.archived) {
+    actions.insertAdjacentHTML('afterbegin', `<button id="suivi-archive-btn" class="btn btn-sm" style="background:var(--green);color:#000;margin-right:auto;" onclick="toggleArchive('${commandeItem}',false)">Restaurer</button>`);
+  } else {
+    actions.insertAdjacentHTML('afterbegin', `<button id="suivi-archive-btn" class="btn btn-sm" style="background:var(--text3);color:#000;margin-right:auto;" onclick="toggleArchive('${commandeItem}',true)">Archiver</button>`);
+  }
+
   modal.classList.add('show');
+}
+
+async function saveSuiviNote(commandeItem) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  const note = document.getElementById('suivi-note-input').value;
+  order.comment = note;
+  try {
+    await apiPost('order-save', order);
+    toast('Note sauvegardée');
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
+}
+
+async function toggleArchive(commandeItem, archive) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  order.archived = archive;
+  try {
+    await apiPost('order-save', order);
+    toast(archive ? 'Commande archivée' : 'Commande restaurée');
+    closeModal('suivi-modal');
+    renderSuivi();
+    renderDashboard();
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
 }
 
 // ══════════════════════════════════════════════════════════
