@@ -375,8 +375,8 @@
     <!-- ─── CARCO ─── -->
     <div class="page" id="page-carco">
       <div class="filter-bar">
-        <select class="form-select" id="carco-client-filter" onchange="carcoPage=0;renderCarco()" style="width:220px;">
-          <option value="">Tous les clients</option>
+        <select class="form-select" id="carco-buyer-filter" onchange="carcoPage=0;renderCarco()" style="width:220px;">
+          <option value="">Tous les acheteurs</option>
         </select>
         <select class="form-select" id="carco-status-filter" onchange="carcoPage=0;renderCarco()" style="width:160px;">
           <option value="">Tous les statuts</option>
@@ -1207,20 +1207,21 @@ function renderTemplates() {
 let carcoPage = 0;
 
 function renderCarco() {
-  const clientFilter = document.getElementById('carco-client-filter')?.value || '';
+  const buyerFilter = document.getElementById('carco-buyer-filter')?.value || '';
   const statusFilter = document.getElementById('carco-status-filter')?.value || '';
   const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
   const today = new Date(); today.setHours(0,0,0,0);
 
-  // Populate client filter
-  const clientSelect = document.getElementById('carco-client-filter');
-  if (clientSelect && clientSelect.options.length <= 1) {
-    CLIENTS.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; clientSelect.appendChild(opt); });
+  // Populate buyer filter from order data
+  const buyerSelect = document.getElementById('carco-buyer-filter');
+  if (buyerSelect && buyerSelect.options.length <= 1) {
+    const buyers = [...new Set(orders.map(o => o.buyer).filter(b => b))].sort();
+    buyers.forEach(b => { const opt = document.createElement('option'); opt.value = b; opt.textContent = b; buyerSelect.appendChild(opt); });
   }
 
   let filtered = getActiveOrders().filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
-    if (clientFilter && o.client !== clientFilter) return false;
+    if (buyerFilter && o.buyer !== buyerFilter) return false;
     if (statusFilter) {
       const st = getCarcoStatus(o, today);
       if (st !== statusFilter) return false;
@@ -1345,14 +1346,14 @@ function openCarcoNote(commandeItem) {
 }
 
 async function exportCarcoPDF() {
-  const clientFilter = document.getElementById('carco-client-filter')?.value || '';
+  const buyerFilter = document.getElementById('carco-buyer-filter')?.value || '';
   const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
   const statusFilter = document.getElementById('carco-status-filter')?.value || '';
   const today = new Date(); today.setHours(0,0,0,0);
 
   let filtered = getActiveOrders().filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
-    if (clientFilter && o.client !== clientFilter) return false;
+    if (buyerFilter && o.buyer !== buyerFilter) return false;
     if (statusFilter) {
       const st = getCarcoStatus(o, today);
       if (st !== statusFilter) return false;
@@ -1374,7 +1375,7 @@ async function exportCarcoPDF() {
   doc.text('DMG Aerospace — Rapport Carco', 10, 13);
   doc.setFontSize(9);
   doc.setTextColor(180, 180, 180);
-  const clientLabel = clientFilter || 'Tous les clients';
+  const clientLabel = buyerFilter || 'Tous les acheteurs';
   doc.text(clientLabel + '  |  ' + new Date().toLocaleDateString('fr-CA'), W - 10, 13, { align: 'right' });
 
   // Table header
@@ -1408,7 +1409,7 @@ async function exportCarcoPDF() {
     y += 6;
   });
 
-  const filename = 'Carco_' + (clientFilter || 'All').replace(/[^a-zA-Z0-9]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+  const filename = 'Carco_' + (buyerFilter || 'All').replace(/[^a-zA-Z0-9]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
   doc.save(filename);
   toast('PDF exporté: ' + filename);
 }

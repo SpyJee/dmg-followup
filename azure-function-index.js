@@ -82,6 +82,7 @@ async function handleOrderSave(context, req, cors) {
     qty: o.qty || 1,
     workOrder: o.workOrder || '',
     comment: o.comment || '',
+    buyer: o.buyer || '',
     archived: o.archived ? 'true' : 'false',
     carcoStatus: o.carcoStatus || '',
     carcoEcd: o.carcoEcd || '',
@@ -105,6 +106,7 @@ async function handleOrderList(context, req, cors) {
     client: e.client, partNumber: e.partNumber,
     dateRequise: e.dateRequise, qty: e.qty,
     workOrder: e.workOrder, comment: e.comment,
+    buyer: e.buyer || '',
     archived: e.archived === 'true',
     carcoStatus: e.carcoStatus || '', carcoEcd: e.carcoEcd || '', carcoNote: e.carcoNote || '',
     createdAt: e.createdAt

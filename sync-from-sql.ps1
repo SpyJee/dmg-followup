@@ -74,11 +74,13 @@ SELECT
     l.[$suiviCol] AS col_suivi,
     l.[$cancelCol] AS col_cancelled,
     l.ARCHIVE AS col_archived,
-    l.[$woCol] AS col_workOrder
+    l.[$woCol] AS col_workOrder,
+    a.NOM_ACHETEUR AS col_buyer
 FROM [*REG_PO] p
 JOIN [*REG_ITEM] i ON i.po_ident = p.po_ident
 JOIN [*REG_LIVRAISON] l ON l.[$numCol] = i.[$numCol]
 LEFT JOIN CLIENTS_FOURNISSEURS cf ON cf.FOURNISSEUR_ID = p.FOURNISSEUR_ID
+LEFT JOIN ACHETEURS a ON a.ACHETEUR_ID = p.ACHETEUR_ID
 WHERE l.[$dateReqCol] IS NOT NULL
   AND ISNULL(l.[$cancelCol], 0) = 0
   AND ISNULL(l.ARCHIVE, 0) = 0
@@ -149,6 +151,7 @@ foreach ($row in $dt.Rows) {
     $wo = if ($row['col_workOrder'] -ne [DBNull]::Value) { [string]$row['col_workOrder'] } else { '' }
     $comment = if ($row['col_comment'] -ne [DBNull]::Value) { [string]$row['col_comment'] } else { '' }
     $suivi = if ($row['col_suivi'] -ne [DBNull]::Value) { [string]$row['col_suivi'] } else { '' }
+    $buyer = if ($row['col_buyer'] -ne [DBNull]::Value) { [string]$row['col_buyer'] } else { '' }
 
     # Append SUIVI note to comment if present
     $fullComment = $comment
@@ -167,6 +170,7 @@ foreach ($row in $dt.Rows) {
         qty          = $qty
         workOrder    = $wo.Trim()
         comment      = $fullComment.Trim()
+        buyer        = $buyer.Trim()
     }
 }
 
