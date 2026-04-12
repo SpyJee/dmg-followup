@@ -89,6 +89,12 @@
   .badge-teal{background:rgba(45,212,191,0.15);color:var(--teal);}
   .badge-gray{background:rgba(80,99,128,0.2);color:var(--text2);}
 
+  /* NOTE DOT */
+  .note-dot{display:inline-block;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;transition:transform 0.15s;}
+  .note-dot:hover{transform:scale(1.4);}
+  .note-dot-empty{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--text3);cursor:pointer;transition:transform 0.15s;opacity:0.4;}
+  .note-dot-empty:hover{transform:scale(1.4);opacity:1;border-color:var(--accent);}
+
   /* STATUS DOTS */
   .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
   .dot-requis{background:var(--text3);}
@@ -198,6 +204,8 @@
     <div class="ni" onclick="showPage('orders',this)"><span class="ni-ic">✦</span>Commandes</div>
     <div class="ni" onclick="showPage('recipes',this)"><span class="ni-ic">☰</span>Recettes</div>
     <div class="ni" onclick="showPage('templates',this)"><span class="ni-ic">▤</span>Templates</div>
+    <div class="nsec">Rapports</div>
+    <div class="ni" onclick="showPage('carco',this)"><span class="ni-ic">✈</span>Carco</div>
     <div class="nsec">Settings</div>
     <div class="ni" onclick="showPage('holidays',this)"><span class="ni-ic">⚙</span>Jours fériés</div>
   </nav>
@@ -280,10 +288,10 @@
               <th>Commande</th>
               <th>No Pièce</th>
               <th>Client</th>
-              <th>Date Requise</th>
+              <th>Date Client</th>
               <th>OP Active</th>
               <th>Description</th>
-              <th>Détail</th>
+              <th>Notes</th>
               <th>Date Limite</th>
               <th>Statut</th>
               <th>Progression</th>
@@ -301,7 +309,7 @@
     <div class="page" id="page-orders">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
         <div class="filter-bar" style="margin-bottom:0;">
-          <input type="text" class="form-input" placeholder="Rechercher..." id="order-search" oninput="renderOrders()" style="width:200px;"/>
+          <input type="text" class="form-input" placeholder="Rechercher..." id="order-search" oninput="ordersPage=0;renderOrders()" style="width:200px;"/>
         </div>
         <button class="btn btn-primary" onclick="openOrderModal()">+ Nouvelle commande</button>
       </div>
@@ -312,7 +320,7 @@
               <th>CommandeItem</th>
               <th>Client</th>
               <th>No Pièce</th>
-              <th>Date Requise</th>
+              <th>Date Client</th>
               <th>Quantité</th>
               <th>No Bon Travail</th>
               <th>OP en cours</th>
@@ -325,6 +333,7 @@
           </tbody>
         </table>
       </div>
+      <div id="orders-pagination"></div>
     </div>
 
     <!-- ─── RECETTES ─── -->
@@ -361,6 +370,43 @@
         <p style="font-size:12px;color:var(--text2);margin-bottom:14px;">Templates prédéfinis utilisés pour créer les recettes de pièces. Ces templates définissent la séquence d'opérations par défaut.</p>
         <div id="templates-list"></div>
       </div>
+    </div>
+
+    <!-- ─── CARCO ─── -->
+    <div class="page" id="page-carco">
+      <div class="filter-bar">
+        <select class="form-select" id="carco-client-filter" onchange="carcoPage=0;renderCarco()" style="width:220px;">
+          <option value="">Tous les clients</option>
+        </select>
+        <select class="form-select" id="carco-status-filter" onchange="carcoPage=0;renderCarco()" style="width:160px;">
+          <option value="">Tous les statuts</option>
+          <option value="On schedule">On schedule</option>
+          <option value="At risk">At risk</option>
+          <option value="Late">Late</option>
+        </select>
+        <input type="text" class="form-input" placeholder="Rechercher..." id="carco-search" oninput="carcoPage=0;renderCarco()" style="width:200px;"/>
+        <div style="flex:1;"></div>
+        <button class="btn btn-sm" style="background:var(--accent);color:#000;" onclick="exportCarcoPDF()">Exporter PDF</button>
+      </div>
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Commande</th>
+              <th>No Pièce</th>
+              <th>Date Client</th>
+              <th>Progression</th>
+              <th>Status</th>
+              <th>New ECD</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody id="carco-body">
+            <tr><td colspan="7"><div class="empty-state"><div class="empty-state-msg">Sélectionnez un client</div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="carco-pagination"></div>
     </div>
 
     <!-- ─── HOLIDAYS ─── -->
@@ -415,7 +461,7 @@
     <div id="order-recipe-preview" style="margin-bottom:10px;"></div>
     <div class="form-row-3">
       <div class="form-group">
-        <label class="form-label">Date Requise</label>
+        <label class="form-label">Date Client</label>
         <input type="date" class="form-input" id="order-date"/>
       </div>
       <div class="form-group">
@@ -478,6 +524,17 @@
     <div id="suivi-modal-body"></div>
     <div class="modal-actions" id="suivi-modal-actions">
       <button class="btn" onclick="closeModal('suivi-modal')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="note-editor-modal" onclick="if(event.target===this)closeModal('note-editor-modal')">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-title" id="note-editor-title">Notes</div>
+    <textarea id="note-editor-input" style="width:100%;min-height:120px;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:var(--r);padding:8px;font-size:12px;font-family:inherit;resize:vertical;"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('note-editor-modal')">Annuler</button>
+      <button class="btn" style="background:var(--accent);color:#000;" onclick="saveNoteFromEditor()">Sauvegarder</button>
     </div>
   </div>
 </div>
@@ -564,7 +621,8 @@ let orders = [];
 let recipes = [];
 let suiviStatuses = {}; // key: commandeItem, value: { op1:'Requis', op2:'En cours', ... }
 let suiviPage = 0;
-const SUIVI_PAGE_SIZE = 50;
+let ordersPage = 0;
+const PAGE_SIZE = 50;
 let dataLoaded = false;
 
 // ══════════════════════════════════════════════════════════
@@ -649,7 +707,8 @@ const pageTitles = {
   orders: 'Commandes',
   recipes: 'Recettes',
   templates: 'Templates de recette',
-  holidays: 'Jours fériés'
+  holidays: 'Jours fériés',
+  carco: 'Carco — Rapport d\'avancement'
 };
 
 function showPage(id, el) {
@@ -665,6 +724,7 @@ function showPage(id, el) {
   if (id === 'recipes') renderRecipes();
   if (id === 'templates') renderTemplates();
   if (id === 'holidays') renderHolidays();
+  if (id === 'carco') renderCarco();
 }
 
 // ══════════════════════════════════════════════════════════
@@ -732,6 +792,8 @@ function getActiveOrders() {
   cutoff.setMonth(cutoff.getMonth() + 3);
   return orders.filter(o => {
     if (o.archived) return false; // skip archived
+    const pn = (o.partNumber || '').toUpperCase();
+    if (pn === 'FAI' || pn === 'NRC') return false; // skip non-production items
     if (!o.dateRequise) return true; // no date = show it
     const dr = new Date(o.dateRequise + 'T12:00:00');
     // Show overdue (past due) + next 3 months
@@ -873,10 +935,30 @@ function renderOrders() {
   const tbody = document.getElementById('orders-body');
   if (!filtered.length) {
     tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-state-msg">Aucune commande</div></div></td></tr>';
+    document.getElementById('orders-pagination').innerHTML = '';
     return;
   }
 
-  tbody.innerHTML = filtered.map(o => {
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (ordersPage >= totalPages) ordersPage = totalPages - 1;
+  if (ordersPage < 0) ordersPage = 0;
+  const pageStart = ordersPage * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const pagDiv = document.getElementById('orders-pagination');
+  if (totalPages > 1) {
+    pagDiv.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;font-size:12px;">
+      <button class="btn btn-sm" onclick="ordersPage=0;renderOrders()" ${ordersPage===0?'disabled':''}>«</button>
+      <button class="btn btn-sm" onclick="ordersPage--;renderOrders()" ${ordersPage===0?'disabled':''}>‹</button>
+      <span style="color:var(--text2);">Page ${ordersPage+1} / ${totalPages} — ${filtered.length} commandes</span>
+      <button class="btn btn-sm" onclick="ordersPage++;renderOrders()" ${ordersPage>=totalPages-1?'disabled':''}>›</button>
+      <button class="btn btn-sm" onclick="ordersPage=${totalPages-1};renderOrders()" ${ordersPage>=totalPages-1?'disabled':''}>»</button>
+    </div>`;
+  } else {
+    pagDiv.innerHTML = `<div style="text-align:center;padding:8px;font-size:12px;color:var(--text3);">${filtered.length} commandes</div>`;
+  }
+
+  tbody.innerHTML = pageItems.map(o => {
     const recipe = recipes.find(r => r.partNumber === o.partNumber);
     let activeOp = '—', deadline = '—';
     if (recipe) {
@@ -1119,6 +1201,219 @@ function renderTemplates() {
 }
 
 // ══════════════════════════════════════════════════════════
+// CARCO — Customer Advancement Reports
+// ══════════════════════════════════════════════════════════
+
+let carcoPage = 0;
+
+function renderCarco() {
+  const clientFilter = document.getElementById('carco-client-filter')?.value || '';
+  const statusFilter = document.getElementById('carco-status-filter')?.value || '';
+  const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Populate client filter
+  const clientSelect = document.getElementById('carco-client-filter');
+  if (clientSelect && clientSelect.options.length <= 1) {
+    CLIENTS.forEach(c => { const opt = document.createElement('option'); opt.value = c; opt.textContent = c; clientSelect.appendChild(opt); });
+  }
+
+  let filtered = getActiveOrders().filter(o => {
+    if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
+    if (clientFilter && o.client !== clientFilter) return false;
+    if (statusFilter) {
+      const st = getCarcoStatus(o, today);
+      if (st !== statusFilter) return false;
+    }
+    return true;
+  });
+
+  // Sort by date
+  filtered.sort((a, b) => (a.dateRequise || '').localeCompare(b.dateRequise || ''));
+
+  const tbody = document.getElementById('carco-body');
+  if (!filtered.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-msg">Aucune commande</div></div></td></tr>';
+    document.getElementById('carco-pagination').innerHTML = '';
+    return;
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  if (carcoPage >= totalPages) carcoPage = totalPages - 1;
+  if (carcoPage < 0) carcoPage = 0;
+  const pageStart = carcoPage * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+
+  const pagDiv = document.getElementById('carco-pagination');
+  if (totalPages > 1) {
+    pagDiv.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;font-size:12px;">
+      <button class="btn btn-sm" onclick="carcoPage=0;renderCarco()" ${carcoPage===0?'disabled':''}>«</button>
+      <button class="btn btn-sm" onclick="carcoPage--;renderCarco()" ${carcoPage===0?'disabled':''}>‹</button>
+      <span style="color:var(--text2);">Page ${carcoPage+1} / ${totalPages} — ${filtered.length} commandes</span>
+      <button class="btn btn-sm" onclick="carcoPage++;renderCarco()" ${carcoPage>=totalPages-1?'disabled':''}>›</button>
+      <button class="btn btn-sm" onclick="carcoPage=${totalPages-1};renderCarco()" ${carcoPage>=totalPages-1?'disabled':''}>»</button>
+    </div>`;
+  } else {
+    pagDiv.innerHTML = `<div style="text-align:center;padding:8px;font-size:12px;color:var(--text3);">${filtered.length} commandes</div>`;
+  }
+
+  tbody.innerHTML = pageItems.map(o => {
+    const info = getActiveOp(o);
+    const statuses = info.statuses || {};
+    const carcoSt = o.carcoStatus || getCarcoStatus(o, today);
+
+    // Progress bar
+    let progressHtml = '';
+    if (info.nbOps > 0) {
+      progressHtml = '<div class="timeline-bar">';
+      for (let i = 0; i < info.nbOps; i++) {
+        const st = statuses['op' + (i+1)] || 'Requis';
+        let cls = '';
+        if (st === 'Complété') cls = 'done';
+        else if (st === 'En cours') cls = 'active';
+        else if (st === 'Bloqué') cls = 'blocked';
+        progressHtml += `<div class="timeline-seg ${cls}"></div>`;
+      }
+      progressHtml += '</div>';
+    }
+
+    // Status badge
+    const stClass = carcoSt === 'On schedule' ? 'badge-green' : carcoSt === 'At risk' ? 'badge-amber' : 'badge-red';
+    const statusSelect = `<select class="form-select" style="font-size:11px;padding:4px 6px;width:auto;min-width:110px;" onchange="updateCarcoField('${o.commandeItem}','carcoStatus',this.value)">
+      <option value="On schedule" ${carcoSt==='On schedule'?'selected':''}>On schedule</option>
+      <option value="At risk" ${carcoSt==='At risk'?'selected':''}>At risk</option>
+      <option value="Late" ${carcoSt==='Late'?'selected':''}>Late</option>
+    </select>`;
+
+    // New ECD — only editable when Late
+    const ecdHtml = carcoSt === 'Late'
+      ? `<input type="date" class="form-input" style="font-size:11px;padding:4px 6px;width:130px;" value="${o.carcoEcd || ''}" onchange="updateCarcoField('${o.commandeItem}','carcoEcd',this.value)">`
+      : `<span style="color:var(--text3);font-size:11px;">—</span>`;
+
+    // Note
+    const noteVal = (o.carcoNote || '').replace(/"/g,'&quot;');
+    const hasNote = o.carcoNote ? true : false;
+    const noteHtml = `<span class="${hasNote ? 'note-dot' : 'note-dot-empty'}" onclick="openCarcoNote('${o.commandeItem}')" title="${hasNote ? 'Modifier la note' : 'Ajouter une note'}"></span>`;
+
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap;">${o.commandeItem}</td>
+      <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
+      <td style="white-space:nowrap;">${o.dateRequise}</td>
+      <td style="width:100px;">${progressHtml}</td>
+      <td>${statusSelect}</td>
+      <td>${ecdHtml}</td>
+      <td style="text-align:center;">${noteHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+function getCarcoStatus(order, today) {
+  if (order.carcoStatus) return order.carcoStatus;
+  const info = getActiveOp(order);
+  if (info.completed) return 'On schedule';
+  if (info.deadline) {
+    const diff = Math.floor((info.deadline - today) / 86400000);
+    if (diff < 0) return 'Late';
+    if (diff <= 5) return 'At risk';
+  }
+  return 'On schedule';
+}
+
+async function updateCarcoField(commandeItem, field, value) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  order[field] = value;
+  try {
+    await apiPost('order-save', order);
+    if (field === 'carcoStatus') renderCarco(); // re-render to show/hide ECD
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
+}
+
+function openCarcoNote(commandeItem) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  noteEditorCommandeItem = commandeItem;
+  document.getElementById('note-editor-title').textContent = 'Note Carco — ' + commandeItem;
+  document.getElementById('note-editor-input').value = order.carcoNote || '';
+  document.getElementById('note-editor-modal').classList.add('show');
+  document.getElementById('note-editor-input').focus();
+  // Override save to use carcoNote
+  document.getElementById('note-editor-modal').dataset.carco = 'true';
+}
+
+async function exportCarcoPDF() {
+  const clientFilter = document.getElementById('carco-client-filter')?.value || '';
+  const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
+  const statusFilter = document.getElementById('carco-status-filter')?.value || '';
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let filtered = getActiveOrders().filter(o => {
+    if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
+    if (clientFilter && o.client !== clientFilter) return false;
+    if (statusFilter) {
+      const st = getCarcoStatus(o, today);
+      if (st !== statusFilter) return false;
+    }
+    return true;
+  }).sort((a, b) => (a.dateRequise || '').localeCompare(b.dateRequise || ''));
+
+  if (!filtered.length) { toast('Aucune commande à exporter', 'error'); return; }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+  const W = doc.internal.pageSize.getWidth();
+
+  // Header
+  doc.setFillColor(15, 23, 42);
+  doc.rect(0, 0, W, 20, 'F');
+  doc.setTextColor(212, 168, 67);
+  doc.setFontSize(14);
+  doc.text('DMG Aerospace — Rapport Carco', 10, 13);
+  doc.setFontSize(9);
+  doc.setTextColor(180, 180, 180);
+  const clientLabel = clientFilter || 'Tous les clients';
+  doc.text(clientLabel + '  |  ' + new Date().toLocaleDateString('fr-CA'), W - 10, 13, { align: 'right' });
+
+  // Table header
+  const cols = ['Commande', 'No Pièce', 'Date Client', 'Status', 'New ECD', 'Note'];
+  const colX = [10, 55, 120, 155, 195, 225];
+  const colW = [45, 65, 35, 40, 30, W - 225 - 10];
+  let y = 28;
+  doc.setFillColor(30, 41, 59);
+  doc.rect(8, y - 5, W - 16, 8, 'F');
+  doc.setFontSize(8);
+  doc.setTextColor(212, 168, 67);
+  cols.forEach((c, i) => doc.text(c, colX[i], y));
+
+  // Rows
+  y += 8;
+  doc.setFontSize(7);
+  filtered.forEach((o, idx) => {
+    if (y > 190) { doc.addPage(); y = 15; }
+    const st = o.carcoStatus || getCarcoStatus(o, today);
+    if (st === 'Late') doc.setTextColor(229, 83, 75);
+    else if (st === 'At risk') doc.setTextColor(232, 184, 74);
+    else doc.setTextColor(200, 200, 200);
+
+    doc.text(o.commandeItem, colX[0], y);
+    doc.text(o.partNumber, colX[1], y);
+    doc.text(o.dateRequise || '', colX[2], y);
+    doc.text(st, colX[3], y);
+    doc.text(st === 'Late' ? (o.carcoEcd || '') : '', colX[4], y);
+    const note = (o.carcoNote || '').substring(0, 50);
+    doc.text(note, colX[5], y);
+    y += 6;
+  });
+
+  const filename = 'Carco_' + (clientFilter || 'All').replace(/[^a-zA-Z0-9]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
+  doc.save(filename);
+  toast('PDF exporté: ' + filename);
+}
+
+// ══════════════════════════════════════════════════════════
 // HOLIDAYS (display)
 // ══════════════════════════════════════════════════════════
 
@@ -1184,6 +1479,25 @@ async function updateSuiviStatus(commandeItem, opKey, value) {
   renderSuivi();
   try {
     await apiPost('suivi-update', { commandeItem, statuses: suiviStatuses[commandeItem] });
+    // Auto-archive when all ops are completed
+    const order = orders.find(x => x.commandeItem === commandeItem);
+    if (order) {
+      const recipe = recipes.find(r => r.partNumber === order.partNumber);
+      if (recipe) {
+        const statuses = suiviStatuses[commandeItem];
+        const allDone = recipe.ops.every((_, i) => {
+          const st = statuses['op' + (i+1)] || 'Requis';
+          return st === 'Complété' || st === 'N/A';
+        });
+        if (allDone && !order.archived) {
+          order.archived = true;
+          await apiPost('order-save', order);
+          toast('Toutes les opérations terminées — commande archivée');
+          renderSuivi();
+          renderDashboard();
+        }
+      }
+    }
   } catch (err) {
     toast('Erreur sauvegarde statut: ' + err.message, 'error');
   }
@@ -1263,11 +1577,11 @@ function renderSuivi() {
   }
 
   // Pagination
-  const totalPages = Math.ceil(filtered.length / SUIVI_PAGE_SIZE);
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   if (suiviPage >= totalPages) suiviPage = totalPages - 1;
   if (suiviPage < 0) suiviPage = 0;
-  const pageStart = suiviPage * SUIVI_PAGE_SIZE;
-  const pageItems = filtered.slice(pageStart, pageStart + SUIVI_PAGE_SIZE);
+  const pageStart = suiviPage * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
 
   // Pagination controls
   const pagDiv = document.getElementById('suivi-pagination');
@@ -1344,7 +1658,7 @@ function renderSuivi() {
       <td style="white-space:nowrap;">${o.dateRequise}</td>
       <td>${info.index >= 0 ? 'OP'+(info.index+1) : '—'}</td>
       <td>${info.name}</td>
-      <td style="font-size:11px;color:var(--text3);">${info.detail || '—'}</td>
+      <td style="text-align:center;">${o.comment ? `<span class="note-dot" onclick="event.stopPropagation();openNoteEditor('${o.commandeItem}')" title="Voir la note"></span>` : ''}</td>
       <td style="white-space:nowrap;${deadlineClass}">${info.deadline ? formatDate(info.deadline) : '—'} ${deadlineBadge}</td>
       <td>${statusSelect}</td>
       <td style="width:100px;">${progressHtml}</td>
@@ -1376,7 +1690,7 @@ function openSuiviDetail(commandeItem) {
   let html = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;font-size:12px;">
     <div><span style="color:var(--text3);">Client:</span> ${order.client}</div>
     <div><span style="color:var(--text3);">No Pièce:</span> <span style="font-family:var(--mono);">${order.partNumber}</span></div>
-    <div><span style="color:var(--text3);">Date Requise:</span> ${order.dateRequise}</div>
+    <div><span style="color:var(--text3);">Date Client:</span> ${order.dateRequise}</div>
     <div><span style="color:var(--text3);">Quantité:</span> ${order.qty}</div>
     <div><span style="color:var(--text3);">Bon Travail:</span> ${order.workOrder || '—'}</div>
     <div><span style="color:var(--text3);">Template:</span> ${recipe.template}</div>
@@ -1437,6 +1751,42 @@ function openSuiviDetail(commandeItem) {
   modal.classList.add('show');
 }
 
+let noteEditorCommandeItem = null;
+
+function openNoteEditor(commandeItem) {
+  const order = orders.find(x => x.commandeItem === commandeItem);
+  if (!order) return;
+  noteEditorCommandeItem = commandeItem;
+  document.getElementById('note-editor-title').textContent = 'Notes — ' + commandeItem;
+  document.getElementById('note-editor-input').value = order.comment || '';
+  document.getElementById('note-editor-modal').dataset.carco = '';
+  document.getElementById('note-editor-modal').classList.add('show');
+  document.getElementById('note-editor-input').focus();
+}
+
+async function saveNoteFromEditor() {
+  if (!noteEditorCommandeItem) return;
+  const order = orders.find(x => x.commandeItem === noteEditorCommandeItem);
+  if (!order) return;
+  const modal = document.getElementById('note-editor-modal');
+  const isCarco = modal.dataset.carco === 'true';
+  const note = document.getElementById('note-editor-input').value;
+  if (isCarco) {
+    order.carcoNote = note;
+  } else {
+    order.comment = note;
+  }
+  try {
+    await apiPost('order-save', order);
+    toast('Note sauvegardée');
+    closeModal('note-editor-modal');
+    modal.dataset.carco = '';
+    if (isCarco) renderCarco(); else renderSuivi();
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+  }
+}
+
 async function saveSuiviNote(commandeItem) {
   const order = orders.find(x => x.commandeItem === commandeItem);
   if (!order) return;
@@ -1458,6 +1808,10 @@ async function toggleArchive(commandeItem, archive) {
     await apiPost('order-save', order);
     toast(archive ? 'Commande archivée' : 'Commande restaurée');
     closeModal('suivi-modal');
+    if (!archive) {
+      document.getElementById('suivi-status-filter').value = '';
+      suiviPage = 0;
+    }
     renderSuivi();
     renderDashboard();
   } catch (err) {
@@ -1647,7 +2001,7 @@ function exportSuiviPDF() {
   doc.text(today.toLocaleDateString('fr-CA') + ' ' + today.toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' }), pageW - 10, 12, { align: 'right' });
 
   // Table header
-  const cols = ['Commande', 'No Pièce', 'Client', 'Date Requise', 'OP Active', 'Description', 'Détail', 'Date Limite', 'Statut'];
+  const cols = ['Commande', 'No Pièce', 'Client', 'Date Client', 'OP Active', 'Description', 'Détail', 'Date Limite', 'Statut'];
   const colW = [32, 30, 28, 22, 16, 24, 30, 22, 18];
   let y = 24;
 

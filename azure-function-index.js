@@ -83,6 +83,9 @@ async function handleOrderSave(context, req, cors) {
     workOrder: o.workOrder || '',
     comment: o.comment || '',
     archived: o.archived ? 'true' : 'false',
+    carcoStatus: o.carcoStatus || '',
+    carcoEcd: o.carcoEcd || '',
+    carcoNote: o.carcoNote || '',
     createdAt: o.createdAt || new Date().toISOString()
   };
 
@@ -103,6 +106,7 @@ async function handleOrderList(context, req, cors) {
     dateRequise: e.dateRequise, qty: e.qty,
     workOrder: e.workOrder, comment: e.comment,
     archived: e.archived === 'true',
+    carcoStatus: e.carcoStatus || '', carcoEcd: e.carcoEcd || '', carcoNote: e.carcoNote || '',
     createdAt: e.createdAt
   }));
 

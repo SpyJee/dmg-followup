@@ -106,6 +106,10 @@ foreach ($row in $dt.Rows) {
     $item = [string]$row['col_item']
     if ([string]::IsNullOrWhiteSpace($po)) { continue }
 
+    $partNumber = if ($row['col_partNumber'] -ne [DBNull]::Value) { [string]$row['col_partNumber'] } else { '' }
+    $pnUpper = $partNumber.Trim().ToUpper()
+    if ($pnUpper -eq 'FAI' -or $pnUpper -eq 'NRC') { continue }
+
     $commandeItem = "$po-$item"
 
     # Skip duplicates (same PO-item, keep first = earliest date)
@@ -145,7 +149,6 @@ foreach ($row in $dt.Rows) {
     $wo = if ($row['col_workOrder'] -ne [DBNull]::Value) { [string]$row['col_workOrder'] } else { '' }
     $comment = if ($row['col_comment'] -ne [DBNull]::Value) { [string]$row['col_comment'] } else { '' }
     $suivi = if ($row['col_suivi'] -ne [DBNull]::Value) { [string]$row['col_suivi'] } else { '' }
-    $partNumber = if ($row['col_partNumber'] -ne [DBNull]::Value) { [string]$row['col_partNumber'] } else { '' }
 
     # Append SUIVI note to comment if present
     $fullComment = $comment
