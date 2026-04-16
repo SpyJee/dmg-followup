@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg:#0a1628; --bg2:#0f1d33; --bg3:#162540; --bg4:#1d2e4d; --bg5:#24375a;
@@ -320,6 +321,7 @@
               <th>CommandeItem</th>
               <th>Client</th>
               <th>No Pièce</th>
+              <th>Recette</th>
               <th>Date Client</th>
               <th>Quantité</th>
               <th>No Bon Travail</th>
@@ -329,7 +331,7 @@
             </tr>
           </thead>
           <tbody id="orders-body">
-            <tr><td colspan="9" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
+            <tr><td colspan="10" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -386,7 +388,8 @@
         </select>
         <input type="text" class="form-input" placeholder="Rechercher..." id="carco-search" oninput="carcoPage=0;renderCarco()" style="width:200px;"/>
         <div style="flex:1;"></div>
-        <button class="btn btn-sm" style="background:var(--accent);color:#000;" onclick="exportCarcoPDF()">Exporter PDF</button>
+        <button class="btn btn-sm" style="background:var(--accent);color:#000;" onclick="exportCarcoExcel()">Export Excel</button>
+        <span style="font-size:10px;color:var(--text3);">To email all buyers, run send-carco.ps1 in PowerShell</span>
       </div>
       <div class="card" style="padding:0;overflow-x:auto;">
         <table>
@@ -793,7 +796,7 @@ function getActiveOrders() {
   return orders.filter(o => {
     if (o.archived) return false; // skip archived
     const pn = (o.partNumber || '').toUpperCase();
-    if (pn === 'FAI' || pn === 'NRC') return false; // skip non-production items
+    if (pn === 'FAI' || pn === 'NRC' || pn === 'NCR' || pn.startsWith('EXPEDITE')) return false; // skip non-production items
     if (!o.dateRequise) return true; // no date = show it
     const dr = new Date(o.dateRequise + 'T12:00:00');
     // Show overdue (past due) + next 3 months
@@ -930,11 +933,11 @@ function renderOrders() {
   const filtered = getActiveOrders().filter(o => {
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search) && !o.client.toLowerCase().includes(search)) return false;
     return true;
-  });
+  }).sort((a, b) => (a.dateRequise || '').localeCompare(b.dateRequise || ''));
 
   const tbody = document.getElementById('orders-body');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="empty-state-msg">Aucune commande</div></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-msg">Aucune commande</div></div></td></tr>';
     document.getElementById('orders-pagination').innerHTML = '';
     return;
   }
@@ -976,6 +979,10 @@ function renderOrders() {
       <td style="color:var(--text);font-weight:500;">${o.commandeItem}</td>
       <td>${o.client}</td>
       <td><span style="font-family:var(--mono);font-size:12px;">${o.partNumber}</span></td>
+      <td>${recipe ? `<select class="recipe-quick-select" data-pn="${o.partNumber}" onchange="quickChangeRecipe(this)" style="font-size:10px;padding:2px 4px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--green);font-family:var(--font);cursor:pointer;">
+        ${Object.keys(TEMPLATES).filter(k=>k!=='Custom').map(t=>`<option value="${t}"${recipe.template===t?' selected':''}>${t}</option>`).join('')}
+        <option value="Standard - Need Check"${recipe.template==='Standard - Need Check'?' selected':''}>Standard - Need Check</option>
+      </select>` : `<button class="btn btn-sm" style="font-size:10px;background:var(--amber);color:#000;" onclick="openRecipeModal();document.getElementById('recipe-part').value='${o.partNumber}'">+ Recette</button>`}</td>
       <td>${o.dateRequise}</td>
       <td>${o.qty}</td>
       <td>${o.workOrder || '—'}</td>
@@ -1101,6 +1108,29 @@ function removeOpRow(i) {
   renderOpsEditor();
 }
 
+async function quickChangeRecipe(selectEl) {
+  const pn = selectEl.dataset.pn;
+  const newTemplate = selectEl.value;
+  const ops = JSON.parse(JSON.stringify(TEMPLATES[newTemplate]?.ops || TEMPLATES['Standard'].ops));
+  const recipeObj = {
+    partNumber: pn,
+    template: newTemplate,
+    ops: ops,
+    nbOps: ops.length,
+    totalDelay: ops.reduce((s, o) => s + (o.delay || 0), 0)
+  };
+  try {
+    await apiPost('recipe-save', recipeObj);
+    const idx = recipes.findIndex(x => x.partNumber === pn);
+    if (idx >= 0) recipes[idx] = recipeObj; else recipes.push(recipeObj);
+    toast('Recette changée → ' + newTemplate);
+    renderOrders();
+  } catch (err) {
+    toast('Erreur: ' + err.message, 'error');
+    renderOrders();
+  }
+}
+
 async function saveRecipe() {
   const partNumber = document.getElementById('recipe-part').value.trim();
   const template = document.getElementById('recipe-template').value;
@@ -1214,12 +1244,25 @@ function renderCarco() {
 
   // Populate buyer filter from order data
   const buyerSelect = document.getElementById('carco-buyer-filter');
-  if (buyerSelect && buyerSelect.options.length <= 1) {
+  if (buyerSelect) {
+    const currentVal = buyerSelect.value;
     const buyers = [...new Set(orders.map(o => o.buyer).filter(b => b))].sort();
+    buyerSelect.innerHTML = '<option value="">Tous les acheteurs</option>';
     buyers.forEach(b => { const opt = document.createElement('option'); opt.value = b; opt.textContent = b; buyerSelect.appendChild(opt); });
+    buyerSelect.value = currentVal;
   }
 
+  const pastCutoff = new Date(today);
+  pastCutoff.setDate(pastCutoff.getDate() - 30);
+
   let filtered = getActiveOrders().filter(o => {
+    const pn = (o.partNumber || '').toUpperCase();
+    if (pn === 'NRC' || pn === 'NCR' || pn.startsWith('EXPEDITE')) return false;
+    // Hide orders with Date Client > 30 days in the past
+    if (o.dateRequise) {
+      const dr = new Date(o.dateRequise + 'T12:00:00');
+      if (dr < pastCutoff) return false;
+    }
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
     if (buyerFilter && o.buyer !== buyerFilter) return false;
     if (statusFilter) {
@@ -1313,11 +1356,26 @@ function getCarcoStatus(order, today) {
   if (order.carcoStatus) return order.carcoStatus;
   const info = getActiveOp(order);
   if (info.completed) return 'On schedule';
-  if (info.deadline) {
-    const diff = Math.floor((info.deadline - today) / 86400000);
-    if (diff < 0) return 'Late';
-    if (diff <= 5) return 'At risk';
-  }
+
+  // Calculate completion percentage
+  const statuses = info.statuses || {};
+  const nbOps = info.nbOps || 0;
+  if (nbOps === 0) return 'On schedule';
+  const done = info.recipe.ops.filter((_, i) => {
+    const st = statuses['op' + (i+1)] || 'Requis';
+    return st === 'Complété' || st === 'N/A';
+  }).length;
+  const pct = done / nbOps;
+
+  // Days until date client
+  const dr = new Date(order.dateRequise + 'T12:00:00');
+  const daysLeft = Math.floor((dr - today) / 86400000);
+
+  // Late: date client is past and not 100% done
+  if (daysLeft < 0) return 'Late';
+  // At risk: within 7 days and not 100% done
+  if (daysLeft <= 7) return 'At risk';
+  // On schedule: >90% done or plenty of time left
   return 'On schedule';
 }
 
@@ -1345,13 +1403,22 @@ function openCarcoNote(commandeItem) {
   document.getElementById('note-editor-modal').dataset.carco = 'true';
 }
 
-async function exportCarcoPDF() {
+function exportCarcoExcel() {
   const buyerFilter = document.getElementById('carco-buyer-filter')?.value || '';
   const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
   const statusFilter = document.getElementById('carco-status-filter')?.value || '';
   const today = new Date(); today.setHours(0,0,0,0);
 
+  const pastCutoff = new Date(today);
+  pastCutoff.setDate(pastCutoff.getDate() - 30);
+
   let filtered = getActiveOrders().filter(o => {
+    const pn = (o.partNumber || '').toUpperCase();
+    if (pn === 'NRC' || pn === 'NCR' || pn.startsWith('EXPEDITE')) return false;
+    if (o.dateRequise) {
+      const dr = new Date(o.dateRequise + 'T12:00:00');
+      if (dr < pastCutoff) return false;
+    }
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search)) return false;
     if (buyerFilter && o.buyer !== buyerFilter) return false;
     if (statusFilter) {
@@ -1363,55 +1430,59 @@ async function exportCarcoPDF() {
 
   if (!filtered.length) { toast('Aucune commande à exporter', 'error'); return; }
 
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
-  const W = doc.internal.pageSize.getWidth();
-
-  // Header
-  doc.setFillColor(15, 23, 42);
-  doc.rect(0, 0, W, 20, 'F');
-  doc.setTextColor(212, 168, 67);
-  doc.setFontSize(14);
-  doc.text('DMG Aerospace — Rapport Carco', 10, 13);
-  doc.setFontSize(9);
-  doc.setTextColor(180, 180, 180);
-  const clientLabel = buyerFilter || 'Tous les acheteurs';
-  doc.text(clientLabel + '  |  ' + new Date().toLocaleDateString('fr-CA'), W - 10, 13, { align: 'right' });
-
-  // Table header
-  const cols = ['Commande', 'No Pièce', 'Date Client', 'Status', 'New ECD', 'Note'];
-  const colX = [10, 55, 120, 155, 195, 225];
-  const colW = [45, 65, 35, 40, 30, W - 225 - 10];
-  let y = 28;
-  doc.setFillColor(30, 41, 59);
-  doc.rect(8, y - 5, W - 16, 8, 'F');
-  doc.setFontSize(8);
-  doc.setTextColor(212, 168, 67);
-  cols.forEach((c, i) => doc.text(c, colX[i], y));
-
-  // Rows
-  y += 8;
-  doc.setFontSize(7);
-  filtered.forEach((o, idx) => {
-    if (y > 190) { doc.addPage(); y = 15; }
+  // Build rows
+  const rows = filtered.map(o => {
+    const info = getActiveOp(o);
+    const statuses = info.statuses || {};
+    const nbOps = info.nbOps || 0;
+    const done = nbOps > 0 ? info.recipe.ops.filter((_, i) => {
+      const st = statuses['op' + (i+1)] || 'Requis';
+      return st === 'Complété' || st === 'N/A';
+    }).length : 0;
+    const pct = nbOps > 0 ? Math.round((done / nbOps) * 100) : 0;
     const st = o.carcoStatus || getCarcoStatus(o, today);
-    if (st === 'Late') doc.setTextColor(229, 83, 75);
-    else if (st === 'At risk') doc.setTextColor(232, 184, 74);
-    else doc.setTextColor(200, 200, 200);
 
-    doc.text(o.commandeItem, colX[0], y);
-    doc.text(o.partNumber, colX[1], y);
-    doc.text(o.dateRequise || '', colX[2], y);
-    doc.text(st, colX[3], y);
-    doc.text(st === 'Late' ? (o.carcoEcd || '') : '', colX[4], y);
-    const note = (o.carcoNote || '').substring(0, 50);
-    doc.text(note, colX[5], y);
-    y += 6;
+    return {
+      'Commande': o.commandeItem,
+      'No Pièce': o.partNumber,
+      'Client': o.client,
+      'Date Client': o.dateRequise || '',
+      'Progression': pct + '%',
+      'Status': st,
+      'New ECD': st === 'Late' ? (o.carcoEcd || '') : '',
+      'Note': o.carcoNote || ''
+    };
   });
 
-  const filename = 'Carco_' + (buyerFilter || 'All').replace(/[^a-zA-Z0-9]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.pdf';
-  doc.save(filename);
-  toast('PDF exporté: ' + filename);
+  // Title row + empty row before data
+  const title = 'DMG Aerospace — Rapport Carco — ' + (buyerFilter || 'Tous les acheteurs') + ' — ' + new Date().toLocaleDateString('fr-CA');
+  const ws = XLSX.utils.aoa_to_sheet([[title], []]);
+
+  // Merge title across all columns
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } }];
+
+  // Append data rows starting at row 3
+  XLSX.utils.sheet_add_json(ws, rows, { origin: 'A3' });
+
+  // Column widths
+  ws['!cols'] = [
+    { wch: 22 }, // Commande
+    { wch: 24 }, // No Pièce
+    { wch: 28 }, // Client
+    { wch: 14 }, // Date Client
+    { wch: 12 }, // Progression
+    { wch: 14 }, // Status
+    { wch: 14 }, // New ECD
+    { wch: 40 }  // Note
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const sheetName = (buyerFilter || 'Carco').substring(0, 31);
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  const filename = 'Carco_' + (buyerFilter || 'All').replace(/[^a-zA-Z0-9]/g, '_') + '_' + new Date().toISOString().slice(0, 10) + '.xlsx';
+  XLSX.writeFile(wb, filename);
+  toast('Excel exporté: ' + filename);
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1694,6 +1765,7 @@ function openSuiviDetail(commandeItem) {
     <div><span style="color:var(--text3);">Date Client:</span> ${order.dateRequise}</div>
     <div><span style="color:var(--text3);">Quantité:</span> ${order.qty}</div>
     <div><span style="color:var(--text3);">Bon Travail:</span> ${order.workOrder || '—'}</div>
+    <div><span style="color:var(--text3);">Acheteur:</span> ${order.buyer || '—'}</div>
     <div><span style="color:var(--text3);">Template:</span> ${recipe.template}</div>
   </div>`;
 
