@@ -4,6 +4,17 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>DMG Aerospace — Production Follow-Up v5</title>
+<script>
+// Early auth gate — redirect to portal BEFORE any body content paints
+// if the user has no session token and no inbound token fragment.
+(function(){
+  try {
+    if (location.hash && location.hash.indexOf('#t=') === 0) return; // inbound from portal
+    if (localStorage.getItem('dmg_auth_token')) return; // already authenticated
+    window.location.replace('https://dmghub.z9.web.core.windows.net/');
+  } catch(_) {}
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
