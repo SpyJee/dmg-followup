@@ -25,7 +25,7 @@ module.exports = async function (context, req) {
   const cors = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Content-Type': 'application/json'
   };
 
@@ -39,6 +39,17 @@ module.exports = async function (context, req) {
 
   try {
     if (route === 'health')        { context.res = { status: 200, headers: cors, body: JSON.stringify({ status: 'ok', node: process.version, timestamp: new Date().toISOString() }) }; return; }
+
+    // Auth gate — enforced only when AUTH_REQUIRED=1 in app settings.
+    if (process.env.AUTH_REQUIRED === '1' && route !== 'health') {
+      const session = await authReadSession(parseBearer(req));
+      if (!session) {
+        context.res = { status: 401, headers: cors, body: JSON.stringify({ error: 'Authentication required', code: 'auth_required' }) };
+        return;
+      }
+      req.authUser = session;
+    }
+
     if (route === 'order-save')    { await handleOrderSave(context, req, cors); return; }
     if (route === 'order-list')    { await handleOrderList(context, req, cors); return; }
     if (route === 'order-delete')  { await handleOrderDelete(context, req, cors); return; }
@@ -330,5 +341,44 @@ async function tableUpsert(account, key, table, entity) {
     } else {
       throw e;
     }
+  }
+}
+
+// ══════════════════════════════════════════
+// AUTH — reads dmgsessions from the shared auth storage account
+// (set AUTH_STORAGE_ACCOUNT_NAME / AUTH_STORAGE_ACCOUNT_KEY on this
+// Function App's config; falls back to STORAGE_* if not set, which
+// only works when the follow-up and auth storage happen to match).
+// ══════════════════════════════════════════
+
+function getAuthStorage() {
+  const account = process.env.AUTH_STORAGE_ACCOUNT_NAME || process.env.STORAGE_ACCOUNT_NAME;
+  const key = process.env.AUTH_STORAGE_ACCOUNT_KEY || process.env.STORAGE_ACCOUNT_KEY;
+  if (!account || !key) throw new Error('AUTH_STORAGE_ACCOUNT_NAME/KEY not configured');
+  return { account, key };
+}
+
+function parseBearer(req) {
+  const h = (req.headers && (req.headers.authorization || req.headers.Authorization)) || '';
+  const m = /^Bearer\s+(.+)$/i.exec(h);
+  return m ? m[1].trim() : null;
+}
+
+function authTokenHash(token) {
+  return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+}
+
+async function authReadSession(token) {
+  if (!token || typeof token !== 'string') return null;
+  const { account, key } = getAuthStorage();
+  const tokenHash = authTokenHash(token);
+  try {
+    const body = await tableReq(account, key, 'GET', `/dmgsessions(PartitionKey='session',RowKey='${tokenHash}')`);
+    const s = JSON.parse(body);
+    if (!s || !s.expiresAt) return null;
+    if (Date.now() > Date.parse(s.expiresAt)) return null;
+    return s;
+  } catch (_) {
+    return null;
   }
 }

@@ -545,6 +545,42 @@
 <!-- ═══════════════ TOAST ═══════════════ -->
 <div class="toast" id="toast"></div>
 
+<!-- ═══ DMG portal auth handshake (runs before app JS) ═══ -->
+<script>
+(function(){
+  var PORTAL_URL = 'https://dmghub.z9.web.core.windows.net/';
+  var AUTH_KEY = 'dmg_auth_token';
+  var USER_KEY = 'dmg_auth_user';
+
+  // Capture token from URL fragment (#t=...) posted by the portal
+  try {
+    if (location.hash && location.hash.indexOf('#t=') === 0) {
+      var t = decodeURIComponent(location.hash.slice(3));
+      if (t) localStorage.setItem(AUTH_KEY, t);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  } catch (_) {}
+
+  // Add Authorization header to API calls + bounce to portal on 401
+  var _origFetch = window.fetch.bind(window);
+  window.fetch = function(url, options){
+    options = options || {};
+    var token = localStorage.getItem(AUTH_KEY);
+    var isApi = typeof url === 'string' && (url.indexOf('/api/dmg/') !== -1 || url.indexOf('/api/followup/') !== -1);
+    if (token && isApi) {
+      options.headers = Object.assign({}, options.headers || {}, { 'Authorization': 'Bearer ' + token });
+    }
+    return _origFetch(url, options).then(function(resp){
+      if (resp.status === 401 && isApi) {
+        try { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(USER_KEY); } catch(_){}
+        window.location.replace(PORTAL_URL);
+      }
+      return resp;
+    });
+  };
+})();
+</script>
+
 <script>
 // ══════════════════════════════════════════════════════════
 // DMG Aerospace — Production Follow-Up v1
