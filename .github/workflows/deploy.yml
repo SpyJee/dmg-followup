@@ -96,7 +96,7 @@ jobs:
             if RESP=$(curl -fsS --max-time 15 "$URL"); then
               echo "Response: $RESP"
               echo "$RESP" | grep -q '"status":"ok"' || { echo "FAIL: status not ok"; exit 1; }
-              echo "$RESP" | grep -q '"node":"v24' || { echo "FAIL: Node runtime is not v24"; exit 1; }
+              echo "$RESP" | grep -q '"node":"v22' || { echo "FAIL: Node runtime is not v22"; exit 1; }
               echo "Smoke test passed."
               exit 0
             fi

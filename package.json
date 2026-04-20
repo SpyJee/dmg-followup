@@ -27,7 +27,7 @@
   "license": "ISC",
   "type": "commonjs",
   "engines": {
-    "node": ">=24"
+    "node": ">=22"
   },
   "bugs": {
     "url": "https://github.com/SpyJee/dmg-followup/issues"
