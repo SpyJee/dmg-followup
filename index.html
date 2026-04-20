@@ -973,9 +973,41 @@ async function deleteOrder(commandeItem) {
   }
 }
 
+// ─── Dept filter (operators only see their department's active orders) ───
+const DEPT_OP_MATCHERS = {
+  'cutting':           /coupe|cutting|sciage|sawing/i,
+  'machining':         /usinage|machining|cnc|tournage|fraisage/i,
+  'deburr':            /[ée]bavur|deburr/i,
+  'assembly':          /assembl[aé]ge|assembly/i,
+  'inspection':        /inspection|cmm|fai/i,
+  'outside-treatment': /sous[- ]?traitance|outside|finition/i,
+  'expedition':        /exp[ée]dition|exped|shipping|identification/i,
+};
+function _authUser(){
+  try { return JSON.parse(localStorage.getItem('dmg_auth_user') || 'null'); } catch(_) { return null; }
+}
+function _activeOpName(o){
+  const recipe = recipes.find(r => r.partNumber === o.partNumber);
+  if (!recipe) return null;
+  const statuses = suiviStatuses[o.commandeItem] || {};
+  for (let i = 0; i < recipe.ops.length; i++){
+    if (statuses['op' + (i+1)] !== 'Complété') return recipe.ops[i].name;
+  }
+  return null;
+}
+function _passesDeptFilter(o){
+  const u = _authUser();
+  if (!u || u.role !== 'operator' || !u.dept) return true;
+  const re = DEPT_OP_MATCHERS[u.dept];
+  if (!re) return true;
+  const op = _activeOpName(o);
+  return op ? re.test(op) : false;
+}
+
 function renderOrders() {
   const search = (document.getElementById('order-search')?.value || '').toLowerCase();
   const filtered = getActiveOrders().filter(o => {
+    if (!_passesDeptFilter(o)) return false;
     if (search && !o.commandeItem.toLowerCase().includes(search) && !o.partNumber.toLowerCase().includes(search) && !o.client.toLowerCase().includes(search)) return false;
     return true;
   }).sort((a, b) => (a.dateRequise || '').localeCompare(b.dateRequise || ''));
@@ -1301,6 +1333,7 @@ function renderCarco() {
   pastCutoff.setDate(pastCutoff.getDate() - 30);
 
   let filtered = getActiveOrders().filter(o => {
+    if (!_passesDeptFilter(o)) return false;
     const pn = (o.partNumber || '').toUpperCase();
     if (pn === 'NRC' || pn === 'NCR' || pn.startsWith('EXPEDITE')) return false;
     // Hide orders with Date Client > 30 days in the past
