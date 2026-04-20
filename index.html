@@ -552,11 +552,20 @@
   var AUTH_KEY = 'dmg_auth_token';
   var USER_KEY = 'dmg_auth_user';
 
-  // Capture token from URL fragment (#t=...) posted by the portal
+  // Capture token + user profile from URL fragment (#t=...&u=...) posted by the portal
   try {
-    if (location.hash && location.hash.indexOf('#t=') === 0) {
-      var t = decodeURIComponent(location.hash.slice(3));
+    var h = location.hash || '';
+    if (h.indexOf('#t=') === 0) {
+      var params = {};
+      h.slice(1).split('&').forEach(function(kv){ var i = kv.indexOf('='); if (i > 0) params[kv.slice(0,i)] = kv.slice(i+1); });
+      var t = decodeURIComponent(params.t || '');
       if (t) localStorage.setItem(AUTH_KEY, t);
+      if (params.u) {
+        try {
+          var u = JSON.parse(decodeURIComponent(escape(atob(params.u))));
+          if (u && u.role) localStorage.setItem(USER_KEY, JSON.stringify(u));
+        } catch (_) {}
+      }
       history.replaceState(null, '', location.pathname + location.search);
     }
   } catch (_) {}
