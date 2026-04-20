@@ -86,3 +86,22 @@ jobs:
             --resource-group dmg-quoting-rg \
             --name dmg-followup-proxy \
             --src function.zip
+
+      - name: Smoke test /health
+        run: |
+          HOST=$(az functionapp show -g dmg-quoting-rg -n dmg-followup-proxy --query defaultHostName -o tsv)
+          URL="https://${HOST}/api/followup/health"
+          echo "Pinging $URL"
+          for i in 1 2 3 4 5 6; do
+            if RESP=$(curl -fsS --max-time 15 "$URL"); then
+              echo "Response: $RESP"
+              echo "$RESP" | grep -q '"status":"ok"' || { echo "FAIL: status not ok"; exit 1; }
+              echo "$RESP" | grep -q '"node":"v24' || { echo "FAIL: Node runtime is not v24"; exit 1; }
+              echo "Smoke test passed."
+              exit 0
+            fi
+            echo "Attempt $i failed, sleeping 10s..."
+            sleep 10
+          done
+          echo "FAIL: health endpoint did not respond after 6 attempts"
+          exit 1

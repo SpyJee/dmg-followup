@@ -38,7 +38,7 @@ module.exports = async function (context, req) {
   context.log(`Follow-Up Function: ${req.method} /${route}`);
 
   try {
-    if (route === 'health')        { context.res = { status: 200, headers: cors, body: JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }) }; return; }
+    if (route === 'health')        { context.res = { status: 200, headers: cors, body: JSON.stringify({ status: 'ok', node: process.version, timestamp: new Date().toISOString() }) }; return; }
     if (route === 'order-save')    { await handleOrderSave(context, req, cors); return; }
     if (route === 'order-list')    { await handleOrderList(context, req, cors); return; }
     if (route === 'order-delete')  { await handleOrderDelete(context, req, cors); return; }
