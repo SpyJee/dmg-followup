@@ -11,7 +11,7 @@
   try {
     if (location.hash && location.hash.indexOf('#t=') === 0) return; // inbound from portal
     if (localStorage.getItem('dmg_auth_token')) return; // already authenticated
-    window.location.replace('https://dmghub.z9.web.core.windows.net/');
+    window.location.replace('https://dmgapps.z9.web.core.windows.net/');
   } catch(_) {}
 })();
 </script>
@@ -559,7 +559,7 @@
 <!-- ═══ DMG portal auth handshake (runs before app JS) ═══ -->
 <script>
 (function(){
-  var PORTAL_URL = 'https://dmghub.z9.web.core.windows.net/';
+  var PORTAL_URL = 'https://dmgapps.z9.web.core.windows.net/';
   var AUTH_KEY = 'dmg_auth_token';
   var USER_KEY = 'dmg_auth_user';
 
