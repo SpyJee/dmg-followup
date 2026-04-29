@@ -322,7 +322,8 @@ async function handleMethodTodoList(context, req, cors) {
   await ensureTable(account, key, 'followupmethodtodos');
 
   const filter = encodeURIComponent("PartitionKey eq 'METHOD'");
-  const raw = await tableReq(account, key, 'GET', `/followupmethodtodos()?$filter=${filter}&$top=2000`);
+  // Azure Table Storage caps $top at 1000 — anything higher is a 400.
+  const raw = await tableReq(account, key, 'GET', `/followupmethodtodos()?$filter=${filter}&$top=1000`);
   const data = JSON.parse(raw);
   const todos = (data.value || []).map(e => ({
     commandeItem: e.RowKey,
