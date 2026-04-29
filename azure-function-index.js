@@ -10,6 +10,11 @@ const crypto = require('crypto');
 //   POST /api/followup/{recipe-save}     — Save/update recipe
 //   GET  /api/followup/{recipe-list}     — List all recipes
 //   POST /api/followup/{recipe-delete}   — Delete recipe
+//   POST /api/followup/{template-save}   — Save/update operation template
+//   GET  /api/followup/{template-list}   — List all templates
+//   POST /api/followup/{template-delete} — Delete template
+//   POST /api/followup/{method-todo-update} — Toggle one method-method-todo box
+//   GET  /api/followup/{method-todo-list}   — List all method-todo entries
 //   POST /api/followup/{suivi-update}    — Update operation status
 //   GET  /api/followup/{suivi-list}      — Get all suivi statuses
 //   GET  /api/followup/{holidays}        — Get holiday list
@@ -17,9 +22,11 @@ const crypto = require('crypto');
 // ══════════════════════════════════════════
 
 // Tables:
-//   followuporders   — PartitionKey: 'ORDER', RowKey: commandeItem
-//   followuprecipes  — PartitionKey: 'RECIPE', RowKey: partNumber
-//   followupsuivi    — PartitionKey: 'SUIVI', RowKey: commandeItem
+//   followuporders     — PartitionKey: 'ORDER', RowKey: commandeItem
+//   followuprecipes    — PartitionKey: 'RECIPE', RowKey: partNumber
+//   followupsuivi      — PartitionKey: 'SUIVI', RowKey: commandeItem
+//   followuptemplates  — PartitionKey: 'TEMPLATE', RowKey: name
+//   followupmethodtodos — PartitionKey: 'METHOD', RowKey: commandeItem
 
 module.exports = async function (context, req) {
   const cors = {
@@ -56,6 +63,11 @@ module.exports = async function (context, req) {
     if (route === 'recipe-save')   { await handleRecipeSave(context, req, cors); return; }
     if (route === 'recipe-list')   { await handleRecipeList(context, req, cors); return; }
     if (route === 'recipe-delete') { await handleRecipeDelete(context, req, cors); return; }
+    if (route === 'template-save')   { await handleTemplateSave(context, req, cors); return; }
+    if (route === 'template-list')   { await handleTemplateList(context, req, cors); return; }
+    if (route === 'template-delete') { await handleTemplateDelete(context, req, cors); return; }
+    if (route === 'method-todo-update') { await handleMethodTodoUpdate(context, req, cors); return; }
+    if (route === 'method-todo-list')   { await handleMethodTodoList(context, req, cors); return; }
     if (route === 'suivi-update')  { await handleSuiviUpdate(context, req, cors); return; }
     if (route === 'suivi-list')    { await handleSuiviList(context, req, cors); return; }
     if (route === 'holidays')      { handleHolidays(context, cors); return; }
@@ -205,6 +217,119 @@ async function handleRecipeDelete(context, req, cors) {
   } catch (e) { /* ignore 404 */ }
 
   context.res = { status: 200, headers: cors, body: JSON.stringify({ ok: true, deleted: partNumber }) };
+}
+
+// ══════════════════════════════════════════
+// TEMPLATE ROUTES
+// ══════════════════════════════════════════
+
+async function handleTemplateSave(context, req, cors) {
+  const { account, key } = getStorage();
+  await ensureTable(account, key, 'followuptemplates');
+
+  const t = req.body;
+  if (!t || !t.name) {
+    context.res = { status: 400, headers: cors, body: JSON.stringify({ error: 'name required' }) };
+    return;
+  }
+
+  const entity = {
+    PartitionKey: 'TEMPLATE',
+    RowKey: t.name,
+    name: t.name,
+    opsJson: JSON.stringify(t.ops || [])
+  };
+
+  await tableUpsert(account, key, 'followuptemplates', entity);
+  context.res = { status: 200, headers: cors, body: JSON.stringify({ ok: true, name: t.name }) };
+}
+
+async function handleTemplateList(context, req, cors) {
+  const { account, key } = getStorage();
+  await ensureTable(account, key, 'followuptemplates');
+
+  const filter = encodeURIComponent("PartitionKey eq 'TEMPLATE'");
+  const raw = await tableReq(account, key, 'GET', `/followuptemplates()?$filter=${filter}&$top=1000`);
+  const data = JSON.parse(raw);
+  const templates = (data.value || []).map(e => ({
+    name: e.RowKey,
+    ops: JSON.parse(e.opsJson || '[]')
+  }));
+
+  context.res = { status: 200, headers: cors, body: JSON.stringify(templates) };
+}
+
+async function handleTemplateDelete(context, req, cors) {
+  const { account, key } = getStorage();
+  const name = (req.body && req.body.name) || '';
+  if (!name) {
+    context.res = { status: 400, headers: cors, body: JSON.stringify({ error: 'name required' }) };
+    return;
+  }
+
+  try {
+    await tableReq(account, key, 'DELETE', `/followuptemplates(PartitionKey='TEMPLATE',RowKey='${encodeURIComponent(name)}')`, null, { 'If-Match': '*' });
+  } catch (e) { /* ignore 404 */ }
+
+  context.res = { status: 200, headers: cors, body: JSON.stringify({ ok: true, deleted: name }) };
+}
+
+// ══════════════════════════════════════════
+// METHOD TO-DO ROUTES
+// ══════════════════════════════════════════
+// 5 fixed boxes per order: recipe, programming, drawing, dimReg, range.
+// Each box stores { by, at } when checked. Order auto-clears from list
+// once all 5 are populated (handled in the frontend filter).
+
+async function handleMethodTodoUpdate(context, req, cors) {
+  const { account, key } = getStorage();
+  await ensureTable(account, key, 'followupmethodtodos');
+
+  const t = req.body || {};
+  const VALID = ['recipe', 'programming', 'drawing', 'dimReg', 'range'];
+  if (!t.commandeItem || !VALID.includes(t.box)) {
+    context.res = { status: 400, headers: cors, body: JSON.stringify({ error: 'commandeItem + valid box required' }) };
+    return;
+  }
+
+  const username = (req.authUser && req.authUser.username) || t.by || 'unknown';
+  const path = `/followupmethodtodos(PartitionKey='METHOD',RowKey='${encodeURIComponent(t.commandeItem)}')`;
+  let existing = {};
+  try {
+    const raw = await tableReq(account, key, 'GET', path);
+    existing = JSON.parse(raw);
+  } catch (_) { /* row doesn't exist yet */ }
+
+  const boxes = JSON.parse(existing.boxesJson || '{}');
+  if (t.checked === false) {
+    delete boxes[t.box];
+  } else {
+    boxes[t.box] = { by: username, at: new Date().toISOString() };
+  }
+
+  const entity = {
+    PartitionKey: 'METHOD',
+    RowKey: t.commandeItem,
+    commandeItem: t.commandeItem,
+    boxesJson: JSON.stringify(boxes)
+  };
+  await tableUpsert(account, key, 'followupmethodtodos', entity);
+  context.res = { status: 200, headers: cors, body: JSON.stringify({ ok: true, boxes }) };
+}
+
+async function handleMethodTodoList(context, req, cors) {
+  const { account, key } = getStorage();
+  await ensureTable(account, key, 'followupmethodtodos');
+
+  const filter = encodeURIComponent("PartitionKey eq 'METHOD'");
+  const raw = await tableReq(account, key, 'GET', `/followupmethodtodos()?$filter=${filter}&$top=2000`);
+  const data = JSON.parse(raw);
+  const todos = (data.value || []).map(e => ({
+    commandeItem: e.RowKey,
+    boxes: JSON.parse(e.boxesJson || '{}')
+  }));
+
+  context.res = { status: 200, headers: cors, body: JSON.stringify(todos) };
 }
 
 // ══════════════════════════════════════════
