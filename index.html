@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Control v12</title>
+<title>DMG Aerospace — Production Control v13</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -206,7 +206,7 @@
   <div class="logo">
     <div class="logo-mark"><img src="dmg-logo.png" alt="DMG Aerospace" style="width:100%;max-width:170px;display:block;"></div>
     <div class="logo-sub">Production Control</div>
-    <div class="logo-ver">v12</div>
+    <div class="logo-ver">v13</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -713,9 +713,9 @@ const DEFAULT_TEMPLATES = [
   ]}
 ];
 let templates = [];  // loaded from backend in loadAllData()
-const getTemplate = name => templates.find(t => t.name === name);
+const getTemplate = name => effectiveTemplates().find(t => t.name === name);
 const templateNames = (excludeCustom = false) =>
-  templates.map(t => t.name).filter(n => !excludeCustom || n !== 'Custom');
+  effectiveTemplates().map(t => t.name).filter(n => !excludeCustom || n !== 'Custom');
 
 // ── HOLIDAYS (Quebec 2026-2027) ──
 const HOLIDAYS = [
@@ -891,20 +891,35 @@ async function apiPost(route, body) {
 
 async function loadAllData() {
   try {
-    const [o, r, s, t, m] = await Promise.all([
+    // Hot path: only what the Dashboard + Suivi tab need to render
+    const [o, r, s] = await Promise.all([
       apiGet('order-list'),
       apiGet('recipe-list'),
-      apiGet('suivi-list'),
-      apiGet('template-list'),
-      apiGet('method-todo-list')
+      apiGet('suivi-list')
     ]);
     orders = o;
     recipes = r;
     suiviStatuses = s;
+    dataLoaded = true;
+    renderDashboard();
+    // Background: templates + method-todos. Not blocking — pages that need
+    // them fall back to DEFAULT_TEMPLATES until the real list arrives.
+    loadSecondaryData();
+  } catch (err) {
+    console.error('Failed to load data:', err);
+    toast('Erreur de chargement des données: ' + err.message, 'error');
+  }
+}
+
+let secondaryLoaded = false;
+async function loadSecondaryData() {
+  try {
+    const [t, m] = await Promise.all([
+      apiGet('template-list'),
+      apiGet('method-todo-list')
+    ]);
     templates = t;
     methodTodos = (m || []).reduce((acc, x) => { acc[x.commandeItem] = x.boxes || {}; return acc; }, {});
-    // First-run seed: if backend has no templates, push the defaults so all
-    // existing recipe.template references continue to resolve.
     if (!templates.length) {
       console.log('Seeding default templates into empty backend table...');
       for (const tpl of DEFAULT_TEMPLATES) {
@@ -912,12 +927,24 @@ async function loadAllData() {
       }
       templates = await apiGet('template-list');
     }
-    dataLoaded = true;
-    renderDashboard();
+    secondaryLoaded = true;
+    // If the user is already looking at a page that depends on this data,
+    // re-render it now that the real values are in.
+    const active = document.querySelector('.page.active')?.id;
+    if (active === 'page-templates') renderTemplates();
+    if (active === 'page-method')    renderMethod();
+    if (active === 'page-orders')    renderOrders();
+    if (active === 'page-recipes')   renderRecipes();
   } catch (err) {
-    console.error('Failed to load data:', err);
-    toast('Erreur de chargement des données: ' + err.message, 'error');
+    console.error('Secondary data load failed:', err);
   }
+}
+
+// Fall back to the seed list when the backend hasn't loaded yet.
+// Used by dropdown populators so the UI is functional during the first
+// 1-2 seconds before secondary data arrives.
+function effectiveTemplates() {
+  return templates.length ? templates : DEFAULT_TEMPLATES;
 }
 
 // ══════════════════════════════════════════════════════════
@@ -1171,7 +1198,7 @@ let editingOps = [];
 function populateRecipeTemplateDropdown() {
   const sel = document.getElementById('recipe-template');
   if (!sel) return;
-  sel.innerHTML = templates.map(t => {
+  sel.innerHTML = effectiveTemplates().map(t => {
     const label = t.ops.length ? `${t.name} (${t.ops.length} ops)` : `${t.name} (vide)`;
     return `<option value="${t.name}">${label}</option>`;
   }).join('');
@@ -1389,6 +1416,10 @@ function renderRecipes() {
 
 function renderTemplates() {
   const container = document.getElementById('templates-list');
+  if (!secondaryLoaded) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-msg">Chargement...</div></div>';
+    return;
+  }
   if (!templates.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-msg">Aucun template</div></div>';
     return;
