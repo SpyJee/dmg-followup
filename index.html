@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Control v9</title>
+<title>DMG Aerospace — Production Control v10</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -206,7 +206,7 @@
   <div class="logo">
     <div class="logo-mark"><img src="dmg-logo.png" alt="DMG Aerospace" style="width:100%;max-width:170px;display:block;"></div>
     <div class="logo-sub">Production Control</div>
-    <div class="logo-ver">v9</div>
+    <div class="logo-ver">v10</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -298,10 +298,11 @@
           <thead>
             <tr>
               <th>Commande</th>
+              <th>Bon Travail</th>
               <th>No Pièce</th>
+              <th>Qté</th>
               <th>Client</th>
               <th>Date Client</th>
-              <th>OP Active</th>
               <th>Description</th>
               <th>Notes</th>
               <th>Date Limite</th>
@@ -310,7 +311,7 @@
             </tr>
           </thead>
           <tbody id="suivi-body">
-            <tr><td colspan="10" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
+            <tr><td colspan="11" class="empty-state"><div class="empty-state-msg">Aucune commande</div></td></tr>
           </tbody>
         </table>
       </div>
@@ -675,6 +676,11 @@ const HOLIDAYS = [
 ];
 const holidaySet = new Set(HOLIDAYS);
 
+// Display helper: orders synced from SQL get composed as "PO-item" so when
+// item is empty the key has a trailing dash. Trim for display only — the
+// underlying key stays stable so all lookups continue to work.
+const fmtCmd = s => (s || '').replace(/-+$/, '');
+
 // ── DATA STORES (loaded from Azure Table Storage) ──
 let orders = [];
 let recipes = [];
@@ -935,7 +941,7 @@ async function saveOrder() {
   const recipe = recipes.find(r => r.partNumber === partNumber);
 
   if (!editKey && orders.find(x => x.commandeItem === commandeItem)) {
-    toast('CommandeItem ' + commandeItem + ' existe déjà', 'error');
+    toast('CommandeItem ' + fmtCmd(commandeItem) + ' existe déjà', 'error');
     return;
   }
 
@@ -972,7 +978,7 @@ async function saveOrder() {
 }
 
 async function deleteOrder(commandeItem) {
-  if (!confirm('Supprimer la commande ' + commandeItem + ' ?')) return;
+  if (!confirm('Supprimer la commande ' + fmtCmd(commandeItem) + ' ?')) return;
   try {
     await apiPost('order-delete', { commandeItem });
     orders = orders.filter(x => x.commandeItem !== commandeItem);
@@ -1064,7 +1070,7 @@ function renderOrders() {
       }
     }
     return `<tr>
-      <td style="color:var(--text);font-weight:500;">${o.commandeItem}</td>
+      <td style="color:var(--text);font-weight:500;">${fmtCmd(o.commandeItem)}</td>
       <td>${o.client}</td>
       <td><span style="font-family:var(--mono);font-size:12px;">${o.partNumber}</span></td>
       <td>${recipe ? `<select class="recipe-quick-select" data-pn="${o.partNumber}" onchange="quickChangeRecipe(this)" style="font-size:10px;padding:2px 4px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--green);font-family:var(--font);cursor:pointer;">
@@ -1430,7 +1436,7 @@ function renderCarco() {
     const noteHtml = `<span class="${hasNote ? 'note-dot' : 'note-dot-empty'}" onclick="openCarcoNote('${o.commandeItem}')" title="${hasNote ? 'Modifier la note' : 'Ajouter une note'}"></span>`;
 
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap;">${o.commandeItem}</td>
+      <td style="font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="white-space:nowrap;">${o.dateRequise}</td>
       <td style="width:100px;">${progressHtml}</td>
@@ -1484,7 +1490,7 @@ function openCarcoNote(commandeItem) {
   const order = orders.find(x => x.commandeItem === commandeItem);
   if (!order) return;
   noteEditorCommandeItem = commandeItem;
-  document.getElementById('note-editor-title').textContent = 'Note Carco — ' + commandeItem;
+  document.getElementById('note-editor-title').textContent = 'Note Carco — ' + fmtCmd(commandeItem);
   document.getElementById('note-editor-input').value = order.carcoNote || '';
   document.getElementById('note-editor-modal').classList.add('show');
   document.getElementById('note-editor-input').focus();
@@ -1532,7 +1538,7 @@ function exportCarcoExcel() {
     const st = o.carcoStatus || getCarcoStatus(o, today);
 
     return {
-      'Commande': o.commandeItem,
+      'Commande': fmtCmd(o.commandeItem),
       'No Pièce': o.partNumber,
       'Client': o.client,
       'Date Client': o.dateRequise || '',
@@ -1732,7 +1738,7 @@ function renderSuivi() {
 
   const tbody = document.getElementById('suivi-body');
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-state-msg">Aucune commande trouvée</div></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="empty-state-msg">Aucune commande trouvée</div></div></td></tr>';
     document.getElementById('suivi-pagination').innerHTML = '';
     return;
   }
@@ -1813,11 +1819,12 @@ function renderSuivi() {
     else if (info.deadline && info.deadline < today) rowClass = 'row-overdue';
 
     return `<tr class="${rowClass}" onclick="openSuiviDetail('${o.commandeItem}')" style="cursor:pointer;">
-      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${o.commandeItem}</td>
+      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}</td>
+      <td style="white-space:nowrap;font-family:var(--mono);font-size:11px;">${o.workOrder || '—'}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
+      <td style="text-align:right;">${o.qty || '—'}</td>
       <td style="font-size:12px;white-space:nowrap;">${o.client}</td>
       <td style="white-space:nowrap;">${o.dateRequise}</td>
-      <td>${info.index >= 0 ? 'OP'+(info.index+1) : '—'}</td>
       <td>${info.name}</td>
       <td style="text-align:center;">${o.comment ? `<span class="note-dot" onclick="event.stopPropagation();openNoteEditor('${o.commandeItem}')" title="Voir la note"></span>` : ''}</td>
       <td style="white-space:nowrap;${deadlineClass}">${info.deadline ? formatDate(info.deadline) : '—'} ${deadlineBadge}</td>
@@ -1836,7 +1843,7 @@ function openSuiviDetail(commandeItem) {
   if (!order) return;
   const recipe = recipes.find(r => r.partNumber === order.partNumber);
   const modal = document.getElementById('suivi-modal');
-  document.getElementById('suivi-modal-title').textContent = 'Commande ' + commandeItem;
+  document.getElementById('suivi-modal-title').textContent = 'Commande ' + fmtCmd(commandeItem);
 
   if (!recipe) {
     document.getElementById('suivi-modal-body').innerHTML = '<div style="color:var(--amber);">Aucune recette trouvée pour ' + order.partNumber + '</div>';
@@ -1919,7 +1926,7 @@ function openNoteEditor(commandeItem) {
   const order = orders.find(x => x.commandeItem === commandeItem);
   if (!order) return;
   noteEditorCommandeItem = commandeItem;
-  document.getElementById('note-editor-title').textContent = 'Notes — ' + commandeItem;
+  document.getElementById('note-editor-title').textContent = 'Notes — ' + fmtCmd(commandeItem);
   document.getElementById('note-editor-input').value = order.comment || '';
   document.getElementById('note-editor-modal').dataset.carco = '';
   document.getElementById('note-editor-modal').classList.add('show');
@@ -2122,7 +2129,7 @@ function renderDashboard() {
     overdueContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Retard</th></tr></thead><tbody>' +
       overdueList.map(({ order: o, info }) => {
         const diff = Math.abs(Math.floor((info.deadline - today) / 86400000));
-        return `<tr><td style="color:var(--text);">${o.commandeItem}</td><td>${o.client}</td><td>${info.name}</td><td style="color:var(--red);">${formatDate(info.deadline)}</td><td><span class="badge badge-red">${diff}j</span></td></tr>`;
+        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}</td><td>${o.client}</td><td>${info.name}</td><td style="color:var(--red);">${formatDate(info.deadline)}</td><td><span class="badge badge-red">${diff}j</span></td></tr>`;
       }).join('') + '</tbody></table>';
   }
 
@@ -2135,7 +2142,7 @@ function renderDashboard() {
     upcomingContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Dans</th></tr></thead><tbody>' +
       upcomingList.map(({ order: o, info, diff }) => {
         const badge = diff === 0 ? '<span class="badge badge-amber">Aujourd\'hui</span>' : `<span class="badge badge-amber">${diff}j</span>`;
-        return `<tr><td style="color:var(--text);">${o.commandeItem}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
+        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
       }).join('') + '</tbody></table>';
   }
 }
@@ -2211,7 +2218,7 @@ function exportSuiviPDF() {
     doc.setTextColor(230, 236, 245);
     x = 10;
     const row = [
-      o.commandeItem, o.partNumber, o.client, o.dateRequise,
+      fmtCmd(o.commandeItem), o.partNumber, o.client, o.dateRequise,
       info.index >= 0 ? 'OP' + (info.index + 1) : '—',
       info.name, (info.detail || '—').substring(0, 20),
       info.deadline ? formatDate(info.deadline) : '—',
