@@ -8,10 +8,36 @@
 $ErrorActionPreference = 'Stop'
 
 $API_BASE = 'https://dmg-followup-proxy.azurewebsites.net/api/followup'
+$AUTH_BASE = 'https://dmg-proxy-b4fpgjh8begye3fb.canadacentral-01.azurewebsites.net/api/dmg'
 $SQL_CONN = 'Server=WIN2K19\SQLEXPRESS;Database=DMG_BASE_TAKe2;Trusted_Connection=Yes;'
 
 # Only sync orders with dateRequise >= this date (skip old unarchived records)
 $DATE_CUTOFF = '2025-01-01'
+
+# ── Step 0: Authenticate ──
+# Both proxies share the dmgsessions table, so a token from dmg-proxy/auth-login
+# works on dmg-followup-proxy too. Set DMG_USER + DMG_PASS env vars to run
+# unattended; otherwise the script prompts.
+$DMG_USER = if ($env:DMG_USER) { $env:DMG_USER } else { Read-Host "DMG username" }
+$DMG_PASS = if ($env:DMG_PASS) {
+    $env:DMG_PASS
+} else {
+    $sec = Read-Host "DMG password" -AsSecureString
+    [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+}
+
+Write-Host "Authenticating as $DMG_USER..." -ForegroundColor Yellow
+$loginBody = @{ username = $DMG_USER; password = $DMG_PASS; site = 'DMG' } | ConvertTo-Json -Compress
+try {
+    $loginRes = Invoke-RestMethod -Uri "$AUTH_BASE/auth-login" -Method Post -ContentType 'application/json' -Body $loginBody
+    $TOKEN = $loginRes.token
+    if (-not $TOKEN) { throw "auth-login returned no token" }
+    Write-Host "Logged in - token expires $($loginRes.expiresAt)" -ForegroundColor Green
+} catch {
+    Write-Host "Login failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+$AUTH_HEADERS = @{ Authorization = "Bearer $TOKEN" }
 
 # ── Step 1: Connect to SQL Server ──
 Write-Host "`n=== DMG Follow-Up SQL Sync ===" -ForegroundColor Cyan
@@ -180,7 +206,7 @@ Write-Host "Mapped $($orders.Count) unique orders" -ForegroundColor Green
 Write-Host "Fetching existing orders from Azure..." -ForegroundColor Yellow
 
 try {
-    $existing = Invoke-RestMethod -Uri "$API_BASE/order-list" -Method Get
+    $existing = Invoke-RestMethod -Uri "$API_BASE/order-list" -Method Get -Headers $AUTH_HEADERS
     $existingKeys = @{}
     foreach ($e in $existing) {
         $existingKeys[$e.commandeItem] = $true
@@ -210,6 +236,7 @@ foreach ($order in $orders) {
         $response = Invoke-RestMethod -Uri "$API_BASE/order-save" `
             -Method Post `
             -ContentType 'application/json' `
+            -Headers $AUTH_HEADERS `
             -Body ([System.Text.Encoding]::UTF8.GetBytes($json))
 
         if ($isNew) { $newCount++ } else { $updateCount++ }
