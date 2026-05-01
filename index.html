@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <link rel="icon" type="image/png" href="dmg-logo.png"/>
-<title>DMG Aerospace — Production Control v17</title>
+<title>DMG Aerospace — Production Control v18</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -211,7 +211,7 @@
   <div class="logo">
     <div class="logo-mark"><img src="dmg-logo.png" alt="DMG Aerospace" style="width:100%;max-width:170px;display:block;"></div>
     <div class="logo-sub">Production Control</div>
-    <div class="logo-ver">v17</div>
+    <div class="logo-ver">v18</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -746,9 +746,18 @@ const fmtCmd = s => (s || '').replace(/-+$/, '');
 // dmgpo:// URL handler (see windows-tools/install-dmgpo-handler.bat).
 // onclick:stopPropagation so the surrounding row's detail-modal handler
 // doesn't fire when the user clicks the PO icon.
-const poLink = po => po
-  ? ` <a href="dmgpo://${encodeURIComponent(po)}" onclick="event.stopPropagation()" title="Ouvrir le bon de commande" class="po-link">↗</a>`
-  : '';
+//
+// PO derivation: the commandeItem field has the form "<po>-<suffix>",
+// where the prefix before the first dash IS the PO number on T:\. The
+// separate o.po field exists in the data but is unreliable (per JP,
+// 2026-05-01), so always derive from commandeItem instead.
+const poFromCmd = s => (s || '').split('-')[0].trim();
+const poLink = cmd => {
+  const po = poFromCmd(cmd);
+  return po
+    ? ` <a href="dmgpo://${encodeURIComponent(po)}" onclick="event.stopPropagation()" title="Ouvrir le bon de commande" class="po-link">↗</a>`
+    : '';
+};
 
 // ── DATA STORES (loaded from Azure Table Storage) ──
 let orders = [];
@@ -1194,7 +1203,7 @@ function renderOrders() {
       }
     }
     return `<tr>
-      <td style="color:var(--text);font-weight:500;">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td>
+      <td style="color:var(--text);font-weight:500;">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td>
       <td>${o.client}</td>
       <td><span style="font-family:var(--mono);font-size:12px;">${o.partNumber}</span></td>
       <td>${recipe ? `<select class="recipe-quick-select" data-pn="${o.partNumber}" onchange="quickChangeRecipe(this)" style="font-size:10px;padding:2px 4px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;color:var(--green);font-family:var(--font);cursor:pointer;">
@@ -1613,7 +1622,7 @@ function renderMethod() {
       </td>`;
     }).join('');
     return `<tr>
-      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td>
+      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="font-size:12px;white-space:nowrap;">${o.client}</td>
       <td style="white-space:nowrap;">${o.dateRequise || '—'}</td>
@@ -1758,7 +1767,7 @@ function renderCarco() {
     const noteHtml = `<span class="${hasNote ? 'note-dot' : 'note-dot-empty'}" onclick="openCarcoNote('${o.commandeItem}')" title="${hasNote ? 'Modifier la note' : 'Ajouter une note'}"></span>`;
 
     return `<tr>
-      <td style="font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td>
+      <td style="font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="white-space:nowrap;">${o.dateRequise}</td>
       <td style="width:100px;">${progressHtml}</td>
@@ -2141,7 +2150,7 @@ function renderSuivi() {
     else if (info.deadline && info.deadline < today) rowClass = 'row-overdue';
 
     return `<tr class="${rowClass}" onclick="openSuiviDetail('${o.commandeItem}')" style="cursor:pointer;">
-      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td>
+      <td style="color:var(--text);font-weight:500;white-space:nowrap;">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td>
       <td style="white-space:nowrap;font-family:var(--mono);font-size:11px;">${o.workOrder || '—'}</td>
       <td style="white-space:nowrap;"><span style="font-family:var(--mono);font-size:11px;">${o.partNumber}</span></td>
       <td style="text-align:right;">${o.qty || '—'}</td>
@@ -2451,7 +2460,7 @@ function renderDashboard() {
     overdueContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Retard</th></tr></thead><tbody>' +
       overdueList.map(({ order: o, info }) => {
         const diff = Math.abs(Math.floor((info.deadline - today) / 86400000));
-        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td><td>${o.client}</td><td>${info.name}</td><td style="color:var(--red);">${formatDate(info.deadline)}</td><td><span class="badge badge-red">${diff}j</span></td></tr>`;
+        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td><td>${o.client}</td><td>${info.name}</td><td style="color:var(--red);">${formatDate(info.deadline)}</td><td><span class="badge badge-red">${diff}j</span></td></tr>`;
       }).join('') + '</tbody></table>';
   }
 
@@ -2464,7 +2473,7 @@ function renderDashboard() {
     upcomingContainer.innerHTML = '<table><thead><tr><th>Commande</th><th>Client</th><th>OP Active</th><th>Date Limite</th><th>Dans</th></tr></thead><tbody>' +
       upcomingList.map(({ order: o, info, diff }) => {
         const badge = diff === 0 ? '<span class="badge badge-amber">Aujourd\'hui</span>' : `<span class="badge badge-amber">${diff}j</span>`;
-        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}${poLink(o.po)}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
+        return `<tr><td style="color:var(--text);">${fmtCmd(o.commandeItem)}${poLink(o.commandeItem)}</td><td>${o.client}</td><td>${info.name}</td><td>${formatDate(info.deadline)}</td><td>${badge}</td></tr>`;
       }).join('') + '</tbody></table>';
   }
 }
