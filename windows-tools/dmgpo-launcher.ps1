@@ -1,4 +1,4 @@
-# DMG PO URL handler — opens the PO PDF or Explorer for a given PO number.
+﻿# DMG PO URL handler — opens the PO PDF or Explorer for a given PO number.
 # Invoked by Windows when a user clicks dmgpo://<PO> in a browser.
 #
 # Argument: full URL like "dmgpo://5000024373" or "dmgpo://5000024373/"
@@ -16,9 +16,13 @@ param([string]$Url)
 $ErrorActionPreference = 'Stop'
 $PoRoot = 'T:\Année En Cours\Bon de Commande'
 
+# Load assemblies up front. System.Windows.Forms isn't auto-loaded in PS 5.1
+# and we need it for the "T: not mapped" message box.
+Add-Type -AssemblyName System.Web
+Add-Type -AssemblyName System.Windows.Forms
+
 # Parse the PO out of the URL: strip scheme, trailing slash, URL-decode.
 $po = $Url -replace '^[a-z]+://', '' -replace '/+$', ''
-Add-Type -AssemblyName System.Web
 $po = [System.Web.HttpUtility]::UrlDecode($po)
 $po = $po.Trim()
 
