@@ -1,0 +1,22 @@
+{
+  "rules": [
+    {
+      "name": "backstop-delete-po-blobs-after-1d",
+      "enabled": true,
+      "type": "Lifecycle",
+      "definition": {
+        "filters": {
+          "blobTypes": ["blockBlob"],
+          "prefixMatch": ["po-pdfs/"]
+        },
+        "actions": {
+          "baseBlob": {
+            "delete": {
+              "daysAfterModificationGreaterThan": 1
+            }
+          }
+        }
+      }
+    }
+  ]
+}
