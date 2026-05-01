@@ -5,7 +5,9 @@
 #
 # Search rules (case-insensitive):
 #   1. Walk every customer folder under the PO root.
-#   2. Find any folder OR file whose name starts with the PO number.
+#   2. Find any folder OR file whose name starts with the PO number, looking
+#      one level deep (covers AEROSPHÈRE/<po>.pdf style) AND two levels deep
+#      (covers AIRBUS/<5-digit-prefix>/<full-po>/ style).
 #   3. If the match is a folder, look inside for "PO <number>*.pdf"
 #      (or any *.pdf containing the PO number) and open the first match.
 #   4. If the match is a file, open it directly.
@@ -41,10 +43,25 @@ if (-not (Test-Path $PoRoot)) {
 # Find any folder/file across all customer subdirectories whose name starts
 # with the PO number. Most POs are unique across customers, so the first hit
 # wins. If no match, fall back to the PO root.
+#
+# Why two passes:
+#   AEROSPHÈRE puts the PDF directly in the customer folder (depth 0).
+#   AIRBUS / Bombardier US group POs by 3-5 digit prefix subfolders, so the
+#   PO file/folder lives one level deeper (depth 1). Cheap pass at depth 0
+#   first, fall back to depth 1 only if nothing found — avoids scanning
+#   thousands of items in customer folders that already had a hit.
 $hits = @()
 Get-ChildItem -Path $PoRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
     $hits += Get-ChildItem -Path $_.FullName -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "$po*" }
+}
+if ($hits.Count -eq 0) {
+    Get-ChildItem -Path $PoRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        Get-ChildItem -Path $_.FullName -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $hits += Get-ChildItem -Path $_.FullName -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -like "$po*" }
+        }
+    }
 }
 
 if ($hits.Count -eq 0) {
