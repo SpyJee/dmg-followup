@@ -585,8 +585,11 @@ function clientIp(req) {
 }
 
 // Service SAS for one specific blob. Permissions: 'r' (read) or 'cw' (create+write).
+// sv=2020-12-06: this is the first version that includes signedEncryptionScope
+// in the StringToSign (field #11). Earlier versions (<= 2020-10-02) only had
+// 15 fields total — and our 16-field array would silently produce a bad sig.
 function generateBlobSas(account, key, container, blobName, permissions, ttlSec) {
-  const sv = '2020-08-04';
+  const sv = '2020-12-06';
   const sr = 'b';
   const sp = permissions;
   const se = new Date(Date.now() + ttlSec * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
