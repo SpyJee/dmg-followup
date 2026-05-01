@@ -19,6 +19,7 @@ const crypto = require('crypto');
 //   GET  /api/followup/{suivi-list}      — Get all suivi statuses
 //   GET  /api/followup/{holidays}        — Get holiday list
 //   GET  /api/followup/{health}          — Health check
+//   GET  /api/followup/{po-pdf}          — Redirect to a SAS URL for the PO PDF in dmgpdfvault
 // ══════════════════════════════════════════
 
 // Tables:
@@ -71,6 +72,7 @@ module.exports = async function (context, req) {
     if (route === 'suivi-update')  { await handleSuiviUpdate(context, req, cors); return; }
     if (route === 'suivi-list')    { await handleSuiviList(context, req, cors); return; }
     if (route === 'holidays')      { handleHolidays(context, cors); return; }
+    if (route === 'po-pdf')        { await handlePoPdf(context, req, cors); return; }
 
     context.res = { status: 404, headers: cors, body: JSON.stringify({ error: 'Unknown route: ' + route }) };
   } catch (err) {
@@ -470,6 +472,205 @@ async function tableUpsert(account, key, table, entity) {
   }
 }
 
+
+// ══════════════════════════════════════════
+// PO PDF lookup — redirect to a SAS URL pointing at dmgpdfvault/po-pdfs.
+// The on-prem sync (sync-pos-to-blob.ps1) keeps the container in step with
+// T:\Bon de Commande every hour; this endpoint just searches the cached
+// blob list for paths containing the PO and hands the user a short SAS.
+// ══════════════════════════════════════════
+
+const PO_BLOB_CONTAINER = process.env.PO_BLOB_CONTAINER || 'po-pdfs';
+const PO_USER_SAS_TTL_MIN = parseInt(process.env.PO_USER_SAS_TTL_MIN || '10', 10);
+
+// In-memory cache for the blob list. Resets on cold start; refreshed every 5 min.
+let _poBlobCache = { ts: 0, paths: [] };
+const PO_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function handlePoPdf(context, req, cors) {
+  const po = String((req.query && req.query.po) || '').trim();
+  const site = String((req.query && req.query.site) || 'DMG').toUpperCase();
+  const username = (req.authUser && req.authUser.username) || 'unauth';
+  const ip = clientIp(req);
+
+  if (!po) {
+    await poAuditLog(context, { action: 'lookup', user: username, po: '', site, ip, success: false, message: 'missing po' });
+    context.res = { status: 400, headers: cors, body: JSON.stringify({ error: 'po required' }) };
+    return;
+  }
+
+  const paths = await getPoBlobPaths(context);
+  const match = pickBestPoBlob(paths, po, site);
+  if (!match) {
+    await poAuditLog(context, { action: 'lookup', user: username, po, site, ip, success: false, message: 'not found' });
+    context.res = { status: 404, headers: cors, body: JSON.stringify({ error: 'PO not found in cloud cache. The hourly sync may not have run yet.' }) };
+    return;
+  }
+
+  const { account, key } = getPoBlobsStorage();
+  const sasUrl = generateBlobSas(account, key, PO_BLOB_CONTAINER, match, 'r', PO_USER_SAS_TTL_MIN * 60);
+  await poAuditLog(context, { action: 'lookup', user: username, po, site, ip, success: true, message: match });
+  // Return JSON, not 302: anchor navigation strips the bearer header, so the
+  // frontend has to fetch with bearer then window.open the SAS itself.
+  context.res = { status: 200, headers: cors, body: JSON.stringify({ sasUrl, blobPath: match, expiresInSec: PO_USER_SAS_TTL_MIN * 60 }) };
+}
+
+// Pick the most-likely PDF when several blobs match the same PO. Mirrors the
+// dmgpo:// launcher heuristic: prefer "PO <num>*.pdf", then *<po>*.pdf with
+// shortest filename, then any path containing the PO. Stable & deterministic.
+function pickBestPoBlob(paths, po, site) {
+  const lowerPo = po.toLowerCase();
+  const sitePrefix = site.toUpperCase() + '/';
+  const candidates = paths.filter(p =>
+    p.toUpperCase().startsWith(sitePrefix) && p.toLowerCase().includes(lowerPo));
+  if (!candidates.length) return null;
+
+  function fileBase(p) {
+    const f = p.split('/').pop() || '';
+    return f.toLowerCase().replace(/\.pdf$/i, '');
+  }
+  // Tier 1: filename starts with "PO " + po (most explicit)
+  const tier1 = candidates.filter(p => fileBase(p).startsWith('po ' + lowerPo));
+  if (tier1.length) return tier1.sort((a, b) => a.length - b.length)[0];
+  // Tier 2: filename equals po (exact match)
+  const tier2 = candidates.filter(p => fileBase(p) === lowerPo);
+  if (tier2.length) return tier2[0];
+  // Tier 3: filename starts with po
+  const tier3 = candidates.filter(p => fileBase(p).startsWith(lowerPo));
+  if (tier3.length) return tier3.sort((a, b) => a.length - b.length)[0];
+  // Tier 4: any path containing po — pick shortest
+  return candidates.sort((a, b) => a.length - b.length)[0];
+}
+
+async function getPoBlobPaths(context) {
+  const now = Date.now();
+  if (_poBlobCache.paths.length && (now - _poBlobCache.ts) < PO_CACHE_TTL_MS) {
+    return _poBlobCache.paths;
+  }
+  const { account, key } = getPoBlobsStorage();
+  const all = [];
+  let marker = null;
+  while (true) {
+    const qs = new URLSearchParams({ restype: 'container', comp: 'list', maxresults: '5000' });
+    if (marker) qs.set('marker', marker);
+    const xml = await blobReq(account, key, 'GET', `/${PO_BLOB_CONTAINER}?${qs.toString()}`);
+    const blobBlocks = xml.match(/<Blob>[\s\S]*?<\/Blob>/g) || [];
+    for (const b of blobBlocks) {
+      const name = (b.match(/<Name>([\s\S]*?)<\/Name>/) || [])[1];
+      if (name) all.push(name);
+    }
+    const next = (xml.match(/<NextMarker>([\s\S]*?)<\/NextMarker>/) || [])[1];
+    if (!next || !next.trim()) break;
+    marker = next.trim();
+  }
+  _poBlobCache = { ts: now, paths: all };
+  context.log(`po-pdf: refreshed blob cache, ${all.length} paths`);
+  return all;
+}
+
+// ----- PO PDF helpers -------------------------------------------------------
+
+function getPoBlobsStorage() {
+  const account = process.env.POBLOBS_ACCOUNT_NAME;
+  const key = process.env.POBLOBS_ACCOUNT_KEY;
+  if (!account || !key) throw new Error('POBLOBS_ACCOUNT_NAME/KEY not configured');
+  return { account, key };
+}
+
+function clientIp(req) {
+  const h = req.headers || {};
+  const xff = h['x-forwarded-for'] || h['X-Forwarded-For'] || '';
+  if (xff) return String(xff).split(',')[0].trim().split(':')[0];
+  return h['x-azure-clientip'] || '';
+}
+
+// Service SAS for one specific blob. Permissions: 'r' (read) or 'cw' (create+write).
+function generateBlobSas(account, key, container, blobName, permissions, ttlSec) {
+  const sv = '2020-08-04';
+  const sr = 'b';
+  const sp = permissions;
+  const se = new Date(Date.now() + ttlSec * 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+  const spr = 'https';
+  const canonicalizedResource = `/blob/${account}/${container}/${blobName}`;
+  const stringToSign = [
+    sp, '', se, canonicalizedResource,
+    '', '', spr, sv, sr,
+    '', '', '', '', '', '', ''
+  ].join('\n');
+  const sig = crypto.createHmac('sha256', Buffer.from(key, 'base64'))
+    .update(stringToSign, 'utf8').digest('base64');
+  const params = new URLSearchParams({ sv, sr, sp, se, spr, sig });
+  const encodedBlob = blobName.split('/').map(encodeURIComponent).join('/');
+  return `https://${account}.blob.core.windows.net/${container}/${encodedBlob}?${params.toString()}`;
+}
+
+// Blob SharedKey-signed REST request. Returns response body string (XML for list).
+function blobReq(account, key, method, pathWithQuery) {
+  return new Promise((resolve, reject) => {
+    const date = new Date().toUTCString();
+    const [pathOnly, qs = ''] = pathWithQuery.split('?');
+    const ch = `x-ms-date:${date}\nx-ms-version:2020-08-04\n`;
+    const cr = `/${account}${pathOnly}` + canonicalizeBlobQuery(qs);
+    const stringToSign = [method, '', '', '', '', '', '', '', '', '', '', '', ch + cr].join('\n');
+    const sig = crypto.createHmac('sha256', Buffer.from(key, 'base64'))
+      .update(stringToSign, 'utf8').digest('base64');
+    const opts = {
+      hostname: `${account}.blob.core.windows.net`, path: pathWithQuery, method,
+      headers: {
+        'Authorization': `SharedKey ${account}:${sig}`,
+        'x-ms-date': date,
+        'x-ms-version': '2020-08-04',
+        'Content-Length': '0'
+      }
+    };
+    const r = https.request(opts, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        if (res.statusCode >= 400) reject(new Error(`${res.statusCode}: ${data.slice(0, 300)}`));
+        else resolve(data);
+      });
+    });
+    r.on('error', reject);
+    r.end();
+  });
+}
+
+function canonicalizeBlobQuery(qs) {
+  if (!qs) return '';
+  const params = new URLSearchParams(qs);
+  const map = {};
+  for (const [k, v] of params.entries()) {
+    const lk = k.toLowerCase();
+    map[lk] = (map[lk] ? map[lk] + ',' : '') + v;
+  }
+  return Object.keys(map).sort().map(k => `\n${k}:${map[k]}`).join('');
+}
+
+async function poAuditLog(context, evt) {
+  try {
+    const { account, key } = getStorage();
+    await ensureTable(account, key, 'poaudit');
+    const now = new Date();
+    const day = now.toISOString().slice(0, 10);
+    const rk = `${now.getTime().toString().padStart(15, '0')}-${crypto.randomUUID().slice(0, 8)}`;
+    const entity = {
+      PartitionKey: day,
+      RowKey: rk,
+      action: evt.action || '',
+      user: evt.user || '',
+      po: evt.po || '',
+      site: evt.site || '',
+      ip: evt.ip || '',
+      success: !!evt.success,
+      message: (evt.message || '').slice(0, 500),
+      at: now.toISOString()
+    };
+    await tableReq(account, key, 'POST', '/poaudit', entity);
+  } catch (e) {
+    context.log.warn('poAuditLog failed:', e.message);
+  }
+}
 
 // ══════════════════════════════════════════
 // AUTH — reads dmgsessions from the shared auth storage account
