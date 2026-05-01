@@ -25,6 +25,8 @@ jobs:
             backend:
               - 'azure-function-index.js'
               - 'azure-function-function.json'
+              - 'azure-pocleanup-index.js'
+              - 'azure-pocleanup-function.json'
 
   deploy-frontend:
     needs: detect-changes
@@ -66,9 +68,11 @@ jobs:
 
       - name: Prepare function package
         run: |
-          mkdir -p deploy/followup-api
+          mkdir -p deploy/followup-api deploy/po-cleanup
           cp azure-function-index.js deploy/followup-api/index.js
           cp azure-function-function.json deploy/followup-api/function.json
+          cp azure-pocleanup-index.js deploy/po-cleanup/index.js
+          cp azure-pocleanup-function.json deploy/po-cleanup/function.json
           cat > deploy/host.json << 'EOF'
           {
             "version": "2.0",
