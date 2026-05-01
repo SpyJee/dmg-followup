@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DMG Aerospace — Production Control v14</title>
+<title>DMG Aerospace — Production Control v15</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -107,8 +107,9 @@
   .note-dot-empty{display:inline-block;width:12px;height:12px;border-radius:50%;border:2px solid var(--text3);cursor:pointer;transition:transform 0.15s;opacity:0.4;}
   .note-dot-empty:hover{transform:scale(1.4);opacity:1;border-color:var(--accent);}
 
-  /* PO LINK — opens the dmgpo:// handler installed via install-dmgpo-handler.bat */
-  .po-link{display:inline-block;padding:1px 5px;background:var(--bg3);color:var(--accent);text-decoration:none;font-size:10px;border-radius:3px;font-weight:600;line-height:1.4;}
+  /* PO LINK — fetches the PO PDF on demand from the office file share via
+     the cloud relay (see openPoFromCloud + dmg-followup-proxy /po-pdf-*). */
+  .po-link{display:inline-block;padding:1px 5px;background:var(--bg3);color:var(--accent);text-decoration:none;font-size:10px;border-radius:3px;font-weight:600;line-height:1.4;cursor:pointer;}
   .po-link:hover{background:var(--accent);color:var(--bg);}
 
   /* STATUS DOTS */
@@ -210,7 +211,7 @@
   <div class="logo">
     <div class="logo-mark"><img src="dmg-logo.png" alt="DMG Aerospace" style="width:100%;max-width:170px;display:block;"></div>
     <div class="logo-sub">Production Control</div>
-    <div class="logo-ver">v14</div>
+    <div class="logo-ver">v15</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
@@ -741,13 +742,67 @@ const holidaySet = new Set(HOLIDAYS);
 // underlying key stays stable so all lookups continue to work.
 const fmtCmd = s => (s || '').replace(/-+$/, '');
 
-// Small clickable affordance that opens the PO PDF/folder via the local
-// dmgpo:// URL handler (see windows-tools/install-dmgpo-handler.bat).
-// onclick:stopPropagation so the surrounding row's detail-modal handler
-// doesn't fire when the user clicks the PO icon.
+// Small clickable affordance that fetches the PO PDF on demand from the
+// office file share via the cloud-relay flow (proxy → on-prem agent →
+// dmgpdfvault blob → 10-min SAS URL). Works for users without T: access.
+// data-po holds the raw PO; openPoFromCloud reads it on click.
+const escapeAttr = s => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const poLink = po => po
-  ? ` <a href="dmgpo://${encodeURIComponent(po)}" onclick="event.stopPropagation()" title="Ouvrir le bon de commande" class="po-link">↗</a>`
+  ? ` <a href="javascript:void(0)" data-po="${escapeAttr(po)}" onclick="openPoFromCloud(event,this.dataset.po)" title="Ouvrir le bon de commande" class="po-link">↗</a>`
   : '';
+
+const PO_SITE = 'DMG'; // multi-site frontend split: stamp into requests
+const PO_FETCH_TIMEOUT_MS = 30000;
+const PO_POLL_INTERVAL_MS = 1500;
+
+async function openPoFromCloud(ev, po) {
+  ev.stopPropagation();
+  ev.preventDefault();
+  if (!po) return;
+  const site = PO_SITE;
+  toast('Recherche du bon de commande ' + po + '…', 'info', 0);
+
+  try {
+    // 1. POST request — backend creates a popdfrequests row, agent will pick it up.
+    let reqResp;
+    try {
+      reqResp = await apiPost('po-pdf-request', { po, site });
+    } catch (e) {
+      // apiPost throws "API …: 429" for rate-limit. Surface a friendly message.
+      if (String(e.message).indexOf('429') !== -1) {
+        toast('Trop de demandes — réessayez dans quelques minutes', 'error');
+        return;
+      }
+      throw e;
+    }
+    const id = reqResp && reqResp.id;
+    if (!id) throw new Error('id manquant dans la réponse');
+
+    // 2. Poll status until ready / failed / timeout.
+    const t0 = Date.now();
+    while (Date.now() - t0 < PO_FETCH_TIMEOUT_MS) {
+      await new Promise(r => setTimeout(r, PO_POLL_INTERVAL_MS));
+      const st = await apiGet('po-pdf-status?id=' + encodeURIComponent(id) + '&site=' + site);
+      if (st.status === 'ready' && st.sasUrl) {
+        toast.dismiss();
+        // Open in a new tab. Browser renders PDF inline since the upload set Content-Type.
+        const w = window.open(st.sasUrl, '_blank', 'noopener,noreferrer');
+        if (!w) toast('Le navigateur a bloqué la fenêtre — autorisez les pop-ups', 'error');
+        return;
+      }
+      if (st.status === 'failed') {
+        toast('PO introuvable: ' + (st.error || 'inconnu'), 'error');
+        return;
+      }
+      // pending / in-progress — keep polling
+    }
+    toast('Délai expiré — l\'agent du bureau est-il en marche ?', 'error', 6000);
+  } catch (e) {
+    console.error('openPoFromCloud failed:', e);
+    toast('Erreur: ' + e.message, 'error');
+  }
+}
 
 // ── DATA STORES (loaded from Azure Table Storage) ──
 let orders = [];
@@ -868,12 +923,23 @@ function showPage(id, el) {
 // TOAST
 // ══════════════════════════════════════════════════════════
 
-function toast(msg, type = 'success') {
+// Auto-dismiss after `durationMs` (default 3s). Pass 0 for sticky — caller
+// must dismiss with toast.dismiss() (used by the PO PDF fetch flow during
+// its 30s polling window).
+let _toastTimer = null;
+function toast(msg, type = 'success', durationMs) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.className = 'toast toast-' + type + ' show';
-  setTimeout(() => t.classList.remove('show'), 3000);
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  const ms = (durationMs === 0 || durationMs > 0) ? durationMs : 3000;
+  if (ms > 0) _toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
+toast.dismiss = function() {
+  const t = document.getElementById('toast');
+  t.classList.remove('show');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+};
 
 // ══════════════════════════════════════════════════════════
 // MODAL HELPERS
