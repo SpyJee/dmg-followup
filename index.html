@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <link rel="icon" type="image/png" href="dmg-logo.png"/>
-<title>DMG Aerospace — Production Control v22</title>
+<title>DMG Aerospace — Production Control v23</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -39,6 +39,9 @@
 
   /* SIDEBAR */
   .sidebar{width:230px;min-width:230px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;}
+  .sb-portal-back{display:flex;align-items:center;gap:8px;padding:11px 20px;color:var(--text2);text-decoration:none;font-size:10px;font-weight:500;letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid var(--border);transition:color .15s,background .15s;}
+  .sb-portal-back:hover{color:var(--accent);background:rgba(255,255,255,0.04);}
+  .sb-portal-back .sb-arrow{font-size:13px;line-height:1;}
   .logo{padding:14px 20px 10px;border-bottom:1px solid var(--border);}
   .logo-mark{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--accent);letter-spacing:-1px;}
   .logo-sub{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:2px;margin-top:2px;}
@@ -202,7 +205,8 @@
   /* RESPONSIVE */
   @media(max-width:900px){
     .sidebar{width:56px;min-width:56px;}
-    .sidebar .logo-mark,.sidebar .logo-sub,.sidebar .logo-ver,.sidebar .nsec,.sidebar .ni span:not(.ni-ic),.sidebar .sb-bottom{display:none;}
+    .sidebar .logo-mark,.sidebar .logo-sub,.sidebar .logo-ver,.sidebar .nsec,.sidebar .ni span:not(.ni-ic),.sidebar .sb-bottom,.sidebar .sb-portal-back .sb-label{display:none;}
+    .sidebar .sb-portal-back{justify-content:center;padding:11px;}
     .sidebar .ni{justify-content:center;padding:10px;}
     .sidebar .ni-ic{width:auto;}
   }
@@ -212,10 +216,13 @@
 
 <!-- ═══════════════ SIDEBAR ═══════════════ -->
 <aside class="sidebar">
+  <a href="https://dmgapps.z9.web.core.windows.net/" class="sb-portal-back" title="Retour au portail DMG Apps">
+    <span class="sb-arrow">←</span><span class="sb-label">DMG Apps</span>
+  </a>
   <div class="logo">
     <div class="logo-mark"><img src="dmg-logo.png" alt="DMG Aerospace" style="width:100%;max-width:170px;display:block;"></div>
     <div class="logo-sub">Production Control</div>
-    <div class="logo-ver">v20</div>
+    <div class="logo-ver">v23</div>
   </div>
   <nav class="nav">
     <div class="nsec">Overview</div>
