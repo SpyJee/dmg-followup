@@ -40,13 +40,23 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Upload index.html to $web
+      - name: Upload index.html to $web (gzipped, conditional-GET)
         run: |
+          # Pre-compress with gzip so Azure blob storage (which doesn't
+          # auto-compress) ships a ~5x smaller payload over the wire.
+          # Cache-Control: no-cache forces the browser to revalidate via
+          # ETag on every load — Azure auto-emits the ETag, so unchanged
+          # deploys return a tiny 304 instead of the full body, and real
+          # deploys are picked up immediately without a hard refresh.
+          gzip -9 -k -f index.html
           az storage blob upload \
             --account-name dmgfollowup \
             --container-name '$web' \
             --name index.html \
-            --file index.html \
+            --file index.html.gz \
+            --content-encoding gzip \
+            --content-type 'text/html; charset=utf-8' \
+            --content-cache-control 'no-cache' \
             --overwrite \
             --auth-mode login
 
