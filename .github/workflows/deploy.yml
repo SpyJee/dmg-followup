@@ -25,6 +25,8 @@ jobs:
             backend:
               - 'azure-function-index.js'
               - 'azure-function-function.json'
+              - 'azure-function-keepalive-index.js'
+              - 'azure-function-keepalive-function.json'
 
   deploy-frontend:
     needs: detect-changes
@@ -79,6 +81,12 @@ jobs:
           mkdir -p deploy/followup-api
           cp azure-function-index.js deploy/followup-api/index.js
           cp azure-function-function.json deploy/followup-api/function.json
+          # Keep-warm timer — fires every 5 min so the Consumption worker
+          # doesn't scale to zero between user requests. Cold start was
+          # 2-5s on the first hit of the day; this keeps the worker hot.
+          mkdir -p deploy/keepalive
+          cp azure-function-keepalive-index.js deploy/keepalive/index.js
+          cp azure-function-keepalive-function.json deploy/keepalive/function.json
           cat > deploy/host.json << 'EOF'
           {
             "version": "2.0",
