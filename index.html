@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <link rel="icon" type="image/png" href="dmg-logo.png"/>
-<title>DMG Aerospace — Production Control v21</title>
+<title>DMG Aerospace — Production Control v22</title>
 <script>
 // Early auth gate — redirect to portal BEFORE any body content paints
 // if the user has no session token and no inbound token fragment.
@@ -17,9 +17,13 @@
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<!-- Chart.js renders the dashboard on app init — defer (loads in parallel
+     with HTML parsing, executes before DOMContentLoaded) so it doesn't
+     block first paint but is ready by the time loadAllData() finishes.
+     jsPDF and SheetJS are only used on user-triggered exports (Carco
+     Excel, Suivi PDF) — lazy-loaded on demand via loadScript() inside
+     those handlers. -->
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
   :root {
     --bg:#0a1628; --bg2:#0f1d33; --bg3:#162540; --bg4:#1d2e4d; --bg5:#24375a;
@@ -667,6 +671,24 @@
 // ══════════════════════════════════════════════════════════
 
 const API_BASE = 'https://dmg-followup-proxy.azurewebsites.net/api/followup';
+
+// ── LAZY SCRIPT LOADER ──
+// Loads a CDN script on demand and resolves once it's executed. Used for
+// jsPDF and SheetJS, which are only needed when the user triggers an
+// export — keeps them out of the critical-path payload.
+const _scriptPromises = {};
+function loadScript(src, isLoaded){
+  if(typeof isLoaded === 'function' && isLoaded()) return Promise.resolve();
+  if(_scriptPromises[src]) return _scriptPromises[src];
+  _scriptPromises[src] = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => { delete _scriptPromises[src]; reject(new Error('Failed to load '+src)); };
+    document.head.appendChild(s);
+  });
+  return _scriptPromises[src];
+}
 
 // ── CLIENTS ──
 const CLIENTS = ['AIRBUS CANADA','AIRBUS ATLANTIQUE CANADA INC.','AIRBUS U.S A220 INC.','BOMBARDIER INC.','BOMBARDIER US AEROSTRUCTURES','LEARJET INC.','PLACETECO INC.','SATAIR USA INC.','CVTCORP','FIGEAC AERO France','Hutchison','Apex Précision'];
@@ -1847,7 +1869,13 @@ function openCarcoNote(commandeItem) {
   document.getElementById('note-editor-modal').dataset.carco = 'true';
 }
 
-function exportCarcoExcel() {
+async function exportCarcoExcel() {
+  // SheetJS is lazy-loaded — kept out of the critical-path payload since
+  // it's only used on this Carco export.
+  await loadScript(
+    'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+    () => typeof window.XLSX !== 'undefined'
+  );
   const buyerFilter = document.getElementById('carco-buyer-filter')?.value || '';
   const search = (document.getElementById('carco-search')?.value || '').toLowerCase();
   const statusFilter = document.getElementById('carco-status-filter')?.value || '';
@@ -2500,9 +2528,14 @@ function renderDashboard() {
 // PDF EXPORT
 // ══════════════════════════════════════════════════════════
 
-function exportSuiviPDF() {
-  if (typeof jspdf === 'undefined') { toast('jsPDF non chargé', 'error'); return; }
-  const { jsPDF } = jspdf;
+async function exportSuiviPDF() {
+  // jsPDF is lazy-loaded — kept out of the critical-path payload since
+  // it's only used on this Suivi PDF export.
+  await loadScript(
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    () => typeof window.jspdf !== 'undefined'
+  );
+  const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
   const today = new Date();
   const pageW = doc.internal.pageSize.getWidth();
